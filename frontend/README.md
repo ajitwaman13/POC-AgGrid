@@ -1,0 +1,1 @@
+memory check -> when user netwrok  increser and descreser uses
