@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.jsx";
 import { ModuleRegistry, AllCommunityModule } from "ag-grid-community"; 
-import { themeBalham } from 'ag-grid-community';
+
 //importing the ag-gird community
 ModuleRegistry.registerModules([AllCommunityModule]);
 createRoot(document.getElementById("root")).render(

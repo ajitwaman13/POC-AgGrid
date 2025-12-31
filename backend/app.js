@@ -231,6 +231,7 @@ app.post("/data", async (req, res) => {
         .lean(),
       Inventory.countDocuments(filterQuery),
     ]);
+    // console.log(rows)
 
     res.json({ rows, total });
   } catch (err) {
