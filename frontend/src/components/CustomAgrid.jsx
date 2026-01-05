@@ -1,51 +1,44 @@
-import React, { useEffect, useMemo, useState } from "react";
-
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { AgGridReact } from "ag-grid-react";
 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 
 import { onchanges_Editing_manual } from "../grid/inlineEditing";
-// import save  button
 import SaveButton from "./SaveButton";
-// default page no
+
 const DEFAULT_PAGE_SIZE = 20;
 
 import { defaultColDef } from "../utils/defaultColDef";
 
 const CustomAgrid = () => {
-  // use  states
   const [rowData, setRowData] = useState([]);
-
   const [page, setPage] = useState(1);
-
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-
   const [totalRows, setTotalRows] = useState(0);
-
   const [sortModel, setSortModel] = useState([]);
-
-  const [filterModel, setFilterModel] = useState({});
-
-  // edit the row
   const [editedRow, setEditedRow] = useState(null);
-
-  //  unsave navigator flag
-
   const [change, setChange] = useState(false);
-
   const [gridApi, setGridApi] = useState(null);
-
   const [editedRowNode, setEditedRowNode] = useState(null);
 
-  //  getting the data
+  // useref  used the
+
+  const editedRowsRef = useRef({});
+
   const fetchData = async () => {
-    // body req data taking this data from use
+    if (!gridApi) return;
+    console.log("gridApi ", gridApi);
+
+    const sortModel = gridApi
+      .getColumnState()
+      .filter((c) => c.sort)
+      .map((c) => ({ colId: c.colId, sort: c.sort }));
     const payload = {
       page,
       limit: pageSize,
       sortModel,
-      filterModel,
+      filterModel: gridApi.getFilterModel(),
     };
 
     const res = await fetch("http://localhost:3000/data", {
@@ -53,15 +46,15 @@ const CustomAgrid = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    console.log("res", res);
-    const data = await res.json();
 
+    const data = await res.json();
     setRowData(data.rows);
     setTotalRows(data.total);
   };
+
   useEffect(() => {
     fetchData();
-  }, [page, pageSize, sortModel, filterModel]);
+  }, [page, pageSize, sortModel, gridApi]);
 
   useEffect(() => {
     if (change) {
@@ -69,59 +62,37 @@ const CustomAgrid = () => {
     }
   }, [change]);
 
-  // useEffect(() => {
-  //   fetchData();
-  //   if (change) {
-  //     alert("Save the data first");
-  //   }
-  // }, [page, pageSize, sortModel, filterModel, change]);
+  /* ================= SORT ================= */
+  // const onSortChanged = (params) => {
+  //   const columnState = params.api.getColumnState();
 
-  // on sorting the method
-  const onSortChanged = (params) => {
-    console.log("params onchnage sort -------------------->", params);
+  //   const sortModel = columnState
+  //     .filter((col) => col.sort)
+  //     .map((col) => ({
+  //       colId: col.colId,
+  //       sort: col.sort,
+  //     }));
 
-    const columnState = params.api.getColumnState();
-    console.log("Params.api", params.api);
-    console.log("get column function", columnState);
+  //   setSortModel(sortModel);
+  //   setPage(1);
+  // };
 
-    // Extract ONLY sorted columns run the protocall
-    const sortModel = columnState
-      .filter((col) => col.sort) // asc / desc
-      .map((col) => ({
-        colId: col.colId,
-        sort: col.sort,
-      }));
-
-    setSortModel(sortModel);
+  /* ================= FILTER ================= */
+  const onFilterChanged = () => {
     setPage(1);
-  };
-  // filter
-  const onFilterChanged = (params) => {
-    console.log("params for the filter", params);
-    const model = params.api.getFilterModel();
-
-    console.log("🔍 FILTER MODEL:", model);
-    setFilterModel(model);
-    setPage(1);
+    fetchData();
   };
 
+  /* ================= PAGINATION INFO ================= */
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
-
   const startRow = totalRows === 0 ? 0 : (page - 1) * pageSize + 1;
-
   const endRow = Math.min(page * pageSize, totalRows);
 
-  // // ----------------------------------  col def
+  // col def
   const columnDefs = useMemo(
     () => [
       { field: "sku", sortable: true },
-      {
-        field: "name",
-        sortable: true,
-        editable: true,
-        // filter: "agTextColumnFilter",
-      },
-      // { field: "category", editable: true, cellEditor: "agTextCellEditor" },
+      { field: "name", sortable: true, editable: true },
       {
         field: "category",
         editable: true,
@@ -130,17 +101,10 @@ const CustomAgrid = () => {
           values: ["Electronics", "Books", "Clothing"],
           allowTyping: true,
           filterList: true,
-          searchType: "contains",
         },
       },
-      { field: "brand", editable: true, cellEditor: "agTextCellEditor" },
-      {
-        field: "sellingPrice",
-        sortable: true,
-        editable: true,
-        // filter: "agNumberColumnFilter",
-      },
-      // { field: "discountPercent", editable:true, cellEditor:"agNumberCellEditor"},
+      { field: "brand", editable: true },
+      { field: "sellingPrice", sortable: true, editable: true },
       {
         field: "discountPercent",
         editable: true,
@@ -148,19 +112,16 @@ const CustomAgrid = () => {
 
         valueSetter: (params) => {
           const value = Number(params.newValue);
-
-          console.log("under the discountPercent ", value);
-          if (isNaN(value)) {
-            alert("Discount must be a number");
-            return false;
-          }
-
-          if (value < 0 || value > 100) {
-            alert("Discount percent must be between 0 and 100");
-            return false;
-          }
+          if (isNaN(value) || value < 0 || value > 100) return false;
 
           params.data.discountPercent = value;
+
+          params.api.refreshCells({
+            rowNodes: [params.node],
+            columns: ["taxPercent"],
+            force: true,
+          });
+
           return true;
         },
       },
@@ -169,109 +130,88 @@ const CustomAgrid = () => {
         editable: true,
         cellEditor: "agNumberCellEditor",
 
-        // ✅ YOU WANT THIS
-        invalidEditValueMode: "block",
+        valueSetter: (params) => {
+          const tax = Number(params.newValue);
+          const discount = Number(params.data?.discountPercent);
 
-        // ✅ THIS MAKES BLOCK WORK
-        cellEditorParams: {
-          getValidationErrors: (params) => {
-            const value = Number(params.value);
+          if (isNaN(tax)) return false;
+          if (tax < 0 || tax > 100) return false;
 
-            if (isNaN(value)) {
-              return ["Tax must be a number"];
-            }
+          if (!isNaN(discount) && tax > discount) {
+            return false;
+          }
 
-            if (value < 0 || value > 100) {
-              return ["Tax must be between 0 and 100"];
-            }
+          params.data.taxPercent = tax;
+          return true;
+        },
 
-            return null;
+        cellClassRules: {
+          "tax-invalid": (params) => {
+            const tax = Number(params.data?.taxPercent);
+            const discount = Number(params.data?.discountPercent);
+            return !isNaN(tax) && !isNaN(discount) && tax > discount;
           },
         },
+
+        tooltipValueGetter: () =>
+          "Tax Percent cannot be greater than Discount Percent",
       },
       {
         field: "quantityInStock",
         editable: true,
         cellClassRules: {
-          "low-stock-cell": (params) =>
-            params.data &&
-            params.data.quantityInStock < params.data.minimumStockLevel,
+          "low-stock-cell": (p) =>
+            p.data.quantityInStock < p.data.minimumStockLevel,
         },
       },
       { field: "minimumStockLevel", editable: true },
-      { field: "warehouseLocation" },
-      { field: "supplierName" },
-      // { field: "supplierContact" },
-      { field: "isActive", sortable: true }, //filter: "agSetColumnFilter" },
-      // { field: "isReturnable" },
-      // { field: "manufactureDate" },
-      // { field: "expiryDate" },
-      // { field: "lastRestockedAt" },
-      // { field: "createdBy" },
-      // { field: "notes" },
+      { field: "isActive", sortable: true },
       { field: "createdAt" },
-      // { field: "updatedAt" },
     ],
     []
   );
 
   return (
     <>
-      {/* save button foe */}
       <SaveButton
-        editedRow={editedRow}
+        // editedRow={editedRow}
+        editedRowsRef={editedRowsRef}
         editedRowNode={editedRowNode}
         setChange={setChange}
+        gridApi={gridApi}
       />
 
       <div className="ag-theme-alpine" style={{ height: 700 }}>
-        {/* render the aggrid componet ... */}
         <AgGridReact
-          //  row data
+          theme="legacy"
           rowData={rowData}
-          // col def
           columnDefs={columnDefs}
-          // default col def
           defaultColDef={defaultColDef}
-          //sort
-          onSortChanged={onSortChanged}
-          //on the filter
+          onSortChanged={fetchData}
           onFilterChanged={onFilterChanged}
-          //editing  cell focuse
-          stopEditingWhenCellsLoseFocus={true}
-          //
-          // suppressMultiSort
-          theme={"legacy"}
+          getRowId={(params) => params.data._id}
+          stopEditingWhenCellsLoseFocus={false}
+          invalidEditValueMode="block"
           onCellValueChanged={(params) =>
             onchanges_Editing_manual(
               params,
               setEditedRow,
               setEditedRowNode,
-              setChange
+              setChange,
+              editedRowsRef
             )
           }
-          //unsave row highlight
           rowClassRules={{
-            "unsaved-row": (params) => params.data?._isDirty === true,
+            "unsaved-row": (p) => p.data?._isDirty === true,
           }}
           onGridReady={(params) => setGridApi(params.api)}
-          //invalidEditValueMode
-          invalidEditValueMode="block"
         />
       </div>
-      {/*  custom logic for the pagen */}
+
+      {/* CUSTOM PAGINATION */}
       <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "8px 12px",
-          borderTop: "1px solid #dcdcdc",
-          background: "#fafafa",
-          fontSize: 13,
-        }}
+        style={{ display: "flex", justifyContent: "space-between", padding: 8 }}
       >
-        {/* LEFT — PAGE SIZE */}
         <div>
           Page Size:&nbsp;
           <select
@@ -287,32 +227,27 @@ const CustomAgrid = () => {
           </select>
         </div>
 
-        {/* CENTER — ROW RANGE */}
         <div>
           {startRow} to {endRow} of {totalRows}
         </div>
 
-        {/* RIGHT — PAGINATION CONTROLS */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div>
           <button disabled={page === 1} onClick={() => setPage(1)}>
             {"<<"}
           </button>
-
           <button disabled={page === 1} onClick={() => setPage(page - 1)}>
             {"<"}
           </button>
-
-          <span style={{ margin: "0 6px" }}>
-            Page {page} of {totalPages}
+          <span>
+            {" "}
+            Page {page} of {totalPages}{" "}
           </span>
-
           <button
             disabled={page === totalPages}
             onClick={() => setPage(page + 1)}
           >
             {">"}
           </button>
-
           <button
             disabled={page === totalPages}
             onClick={() => setPage(totalPages)}

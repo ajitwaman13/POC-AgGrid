@@ -14,10 +14,11 @@
 //     console.error("SAVE FAILED:", err);
 //   }
 // };
-
+// this import
 export const saveRowToServer = async (rowData, gridApi) => {
   try {
     console.log("updating ..", gridApi);
+    console.log("row data ", rowData);
     await fetch(`http://localhost:3000/${rowData._id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -32,6 +33,34 @@ export const saveRowToServer = async (rowData, gridApi) => {
     }
   } catch (err) {
     console.error("SAVE FAILED:", err);
+  }
+};
+
+// utils/saveRowsToServer.js
+export const saveRowsToServerBulk = async (rows, gridApi) => {
+  try {
+    console.log("💾 BULK SAVING ROWS:", rows.length);
+
+    const res = await fetch("http://localhost:3000/bulk-update", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows }),
+    });
+
+    // rowData._isDirty = false;
+    // if (gridApi) {
+    //   gridApi.refreshCells({ force: true });
+    // }
+    const data = await res.json();
+    console.log("save the data", data);
+    if (gridApi) {
+      gridApi.refreshCells({ force: true });
+    }
+
+    return data;
+  } catch (err) {
+    console.error("failed:", err);
+    throw err;
   }
 };
 

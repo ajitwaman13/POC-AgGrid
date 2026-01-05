@@ -183,8 +183,7 @@ app.post("/data", async (req, res) => {
     /* ===== SORT ===== */
     const sortQuery = {};
     if (sortModel.length) {
-      sortQuery[sortModel[0].colId] =
-        sortModel[0].sort === "asc" ? 1 : -1;
+      sortQuery[sortModel[0].colId] = sortModel[0].sort === "asc" ? 1 : -1;
     }
 
     /* ===== FILTER ===== */
@@ -324,47 +323,83 @@ app.post("/data", async (req, res) => {
 //   }
 // });
 
-
-
 // update the table or data
-app.put("/:id", async (req, res) => {
+// app.put("/:id", async (req, res) => {
+//   try {
+//     console.log("Api hit editing ...");
+
+//     const id = req.params.id;
+//     const updateData = req.body;
+//     console.log("id ", id);
+//     //  console.log(id ,updateData)
+//     //   console.log("UPDATE ID:", id);
+//     //   console.log("UPDATE DATA:", updateData);
+
+//     const updatedRow = await Inventory.findByIdAndUpdate(id, updateData, {
+//       new: true,
+//     });
+//     // console.log(updatedRow)
+
+//     if (!updatedRow) {
+//       return res.status(404).json({
+//         message: "Record not found",
+//       });
+//     }
+
+//     res.status(200).json({
+//       message: "Data updated successfully",
+//       data: updatedRow,
+//     });
+//   } catch (error) {
+//     console.error("UPDATE ERROR:", error);
+//     res.status(500).json({
+//       message: "Failed to update data",
+//       error: error.message,
+//     });
+//   }
+// });
+app.put("/bulk-update", async (req, res) => {
   try {
-   console.log("Api hit editing ...")
-   
-   const id = req.params.id;
-   const updateData = req.body;
-   console.log("id ",id)
-  //  console.log(id ,updateData)
-  //   console.log("UPDATE ID:", id);
-  //   console.log("UPDATE DATA:", updateData);
+    console.log("Bulk update API hit");
 
-    const updatedRow = await Inventory.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true}
-    );
-    // console.log(updatedRow)
+    const { rows } = req.body;
 
-    if (!updatedRow) {
-      return res.status(404).json({
-        message: "Record not found",
+    // 1️⃣ Validate request
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({
+        message: "rows must be a non-empty array",
       });
     }
 
+    // 2️⃣ Prepare bulk operations
+    const bulkOps = rows.map((row) => {
+      const { _id, ...updateData } = row; // ❌ remove _id from update
+
+      return {
+        updateOne: {
+          filter: { _id: new mongoose.Types.ObjectId(_id) }, // ✅ ObjectId
+          update: { $set: updateData },
+        },
+      };
+    });
+
+    // 3️⃣ Execute bulk update
+    const result = await Inventory.bulkWrite(bulkOps);
+
     res.status(200).json({
-      message: "Data updated successfully",
-      data: updatedRow,
+      message: "Bulk update successful",
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
     });
   } catch (error) {
-    console.error("UPDATE ERROR:", error);
+    console.error("BULK UPDATE ERROR:", error);
+
     res.status(500).json({
-      message: "Failed to update data",
+      message: "Bulk update failed",
       error: error.message,
     });
   }
 });
-
-
 app.listen(3000, () => {
   console.log("server runing at the 3000");
 });

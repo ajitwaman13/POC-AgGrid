@@ -9,3 +9,8 @@
   font-weight: bold;
 }
 
+.tax-invalid {
+  background-color: #f00404;
+  border: 1px solid #b40b0e;
+}
+

@@ -4,17 +4,23 @@ export const onchanges_Editing_manual = (
   params,
   setEditedRow,
   setEditedRowNode,
-  setChange
+  setChange,
+  editedRowsRef
 ) => {
   console.log("on chanage editing ...");
 
   // set the unsave State
   if (params.oldValue != params.newValue) {
-    // console.log("Id for unsave",id)
     console.log("isdirty", params.data._isDirty);
-    //custom flag to track unsaved changes
+
     params.data._isDirty = true;
     params.node.setDataValue("_isDirty", true);
+
+    editedRowsRef.current[params.node.id] = params.node;
+
+    // optional but good
+    params.api.redrawRows({ rowNodes: [params.node] });
+
     setEditedRowNode(params.node);
     setChange(true);
   }
