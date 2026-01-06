@@ -19,15 +19,29 @@ const DataManagerGrid = () => {
   const [loading, setLoading] = useState(false);
   const [gridApi, setGridApi] = useState(null);
 
-  // Unified Fetch Function
+  const [pinnedTopRowData, setPinnedTopRowData] = useState([
+    {
+      sku: "",
+      name: "",
+      category: "",
+      sellingPrice: null,
+      discountPercent: null,
+      taxPercent: null,
+      quantityInStock: null,
+      minimumStockLevel: null,
+      isActive: true,
+      _isNew: true,
+      _isDirty: false,
+    },
+  ]);
+
   const loadData = useCallback(async () => {
     const api = gridRef.current?.api;
-    console.log("API", api);
     if (!api) return;
 
     setLoading(true);
     const payload = {
-      page: Math.floor(page),
+      page,
       limit: pageSize,
       sortModel: api
         .getColumnState()
@@ -52,20 +66,24 @@ const DataManagerGrid = () => {
     }
   }, [page, pageSize]);
 
-  // Trigger fetch on pagination or when grid is ready
   useEffect(() => {
-    if (gridApi) {
-      loadData();
-    }
+    if (gridApi) loadData();
   }, [page, pageSize, gridApi, loadData]);
 
   const columnDefs = useMemo(
     () => [
-      { field: "_id", sortable: true, filter: "agTextColumnFilter" },
-      { field: "sku", sortable: true, filter: "agTextColumnFilter" },
+      // { field: "_id" },
+
+      {
+        field: "sku",
+        sortable: true,
+        filter: "agTextColumnFilter",
+        editable: true,
+      },
       { field: "name", editable: true, filter: "agTextColumnFilter" },
       { field: "category", editable: true, filter: "agTextColumnFilter" },
       { field: "sellingPrice", editable: true, filter: "agNumberColumnFilter" },
+
       {
         field: "discountPercent",
         editable: true,
@@ -83,6 +101,7 @@ const DataManagerGrid = () => {
           return true;
         },
       },
+
       {
         field: "taxPercent",
         editable: true,
@@ -97,13 +116,12 @@ const DataManagerGrid = () => {
           return true;
         },
         cellClassRules: {
-          "tax-invalid": (params) => {
-            const tax = Number(params.data?.taxPercent);
-            const discount = Number(params.data?.discountPercent);
-            return tax > discount;
-          },
+          "tax-invalid": (params) =>
+            Number(params.data?.taxPercent) >
+            Number(params.data?.discountPercent),
         },
       },
+
       {
         field: "quantityInStock",
         editable: true,
@@ -118,30 +136,39 @@ const DataManagerGrid = () => {
         editable: true,
         filter: "agNumberColumnFilter",
       },
-      { field: "isActive", sortable: true, filter: true },
+      { field: "isActive", sortable: true, filter: true, editable: true },
     ],
     []
   );
 
+  const onCellValueChanged = (params) => {
+    if (params.node.rowPinned === "top") {
+      params.data._isDirty = true;
+      setPinnedTopRowData([{ ...params.data }]);
+      return;
+    }
+    if (params.oldValue !== params.newValue) {
+      params.data._isDirty = true;
+      params.api.applyTransaction({ update: [params.data] });
+    }
+  };
+
+  //  update
   const onSave = async () => {
     const changedRows = [];
     const changedNodes = [];
-    console.log("changeRow", changedRows);
-    console.log("changedNodes", changedNodes);
 
     gridRef.current.api.forEachNode((node) => {
-      console.log("Gridref current api", gridRef);
-      if (node.data._isDirty) {
-        console.log("node data ", node.data);
-        console.log(
-          " changedRows.push(node.data);",
-          changedRows.push(node.data)
-        );
-        console.log("changedNodes.push(node)", changedNodes.push(node));
+      if (node.data._isDirty && !node.data._isNew) {
+        changedRows.push(node.data);
+        changedNodes.push(node);
       }
     });
 
-    if (changedRows.length === 0) return alert("No changes detected");
+    if (!changedRows.length) {
+      alert("No changes detected");
+      return;
+    }
 
     try {
       await fetch("http://localhost:3000/bulk-update", {
@@ -152,14 +179,126 @@ const DataManagerGrid = () => {
 
       alert("Saved Successfully");
 
-      // CLEAR HIGHLIGHTS manually
-      changedNodes.forEach((node) => {
-        node.setDataValue("_isDirty", false);
-      });
+      changedNodes.forEach((node) => node.setDataValue("_isDirty", false));
 
       loadData();
-    } catch (error) {
+    } catch {
       alert("Save failed!");
+    }
+  };
+
+  // add the row
+  // const addData = async () => {
+  //   gridRef.current.api.stopEditing();
+  //   const pinnedRow = pinnedTopRowData[0];
+  //   const { _isNew, _isDirty, ...cleanData } = pinnedRow;
+  //   console.log("new data ", cleanData);
+
+  //   setLoading(true);
+  //   try {
+  //     const res = await fetch("http://localhost:3000/data/bulk-create", {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ rows: [cleanData] }),
+  //     });
+
+  //     const data = await res.json();
+  //     console.log("Data", data);
+
+  //     const result = gridRef.current.api.applyTransaction({
+  //       add: [data],
+  //       addIndex: 0,
+  //     });
+  //     //   in built fun to show new row in top
+  //     if (result.add && result.add.length > 0) {
+  //       const addedNode = result.add[0];
+
+  //       gridRef.current.api.flashCells({
+  //         rowNodes: [addedNode],
+  //         flashDuration: 3000,
+  //         fadeDuration: 1000,
+  //       });
+
+  //       gridRef.current.api.ensureIndexVisible(0, "top");
+  //     }
+  //     setPinnedTopRowData([
+  //       {
+  //         sku: "",
+  //         name: "",
+  //         category: "",
+  //         sellingPrice: null,
+  //         discountPercent: null,
+  //         taxPercent: null,
+  //         quantityInStock: null,
+  //         minimumStockLevel: null,
+  //         isActive: true,
+  //         _isNew: true,
+  //         _isDirty: false,
+  //       },
+  //     ]);
+  //     alert("New data saved successfully!");
+  //     // loadData();
+  //   } catch (error) {
+  //     alert("Server error occurred.");
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+  const addData = async () => {
+    // gridRef.current.api.stopEditing();
+    const pinnedRow = pinnedTopRowData[0];
+    const { _isNew, _isDirty, ...cleanData } = pinnedRow;
+
+    setLoading(true);
+    try {
+      const res = await fetch("http://localhost:3000/data/bulk-create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: [cleanData] }),
+      });
+
+      const responseJson = await res.json();
+
+      const rowToInsert = responseJson.newdata && responseJson.newdata[0];
+
+      const result = gridRef.current.api.applyTransaction({
+        add: [rowToInsert],
+        addIndex: 0,
+      });
+
+      if (result.add && result.add.length > 0) {
+        const addedNode = result.add[0];
+        gridRef.current.api.flashCells({
+          rowNodes: [addedNode],
+          flashDuration: 3000,
+        });
+        gridRef.current.api.ensureIndexVisible(0, "top");
+      }
+
+      setPinnedTopRowData([
+        {
+          sku: "",
+          name: "",
+          category: "",
+          sellingPrice: null,
+          discountPercent: null,
+          taxPercent: null,
+          quantityInStock: null,
+          minimumStockLevel: null,
+          isActive: true,
+          _isNew: true,
+          _isDirty: false,
+        },
+      ]);
+
+      alert("New data saved successfully!");
+
+      setTotalRows((prev) => prev + 1);
+    } catch (error) {
+      console.error(error);
+      alert("Server error occurred.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -170,15 +309,12 @@ const DataManagerGrid = () => {
 
   return (
     <div className="container">
-      <div
-        style={{
-          marginBottom: 10,
-          display: "flex",
-          justifyContent: "space-between",
-        }}
-      >
-        <button onClick={onSave} style={{ padding: "10px" }} disabled={loading}>
+      <div style={{ marginBottom: 10, display: "flex", gap: 10 }}>
+        <button onClick={onSave} disabled={loading}>
           Save Changes
+        </button>
+        <button onClick={addData} disabled={loading}>
+          Add Row
         </button>
         {loading && <span>Loading...</span>}
       </div>
@@ -187,6 +323,7 @@ const DataManagerGrid = () => {
         <AgGridReact
           ref={gridRef}
           rowData={rowData}
+          pinnedTopRowData={pinnedTopRowData}
           columnDefs={columnDefs}
           defaultColDef={{
             flex: 1,
@@ -198,13 +335,10 @@ const DataManagerGrid = () => {
           onSortChanged={triggerRefresh}
           onFilterChanged={triggerRefresh}
           getRowId={(params) => params.data._id}
-          onCellValueChanged={(params) => {
-            if (params.oldValue !== params.newValue) {
-              params.data._isDirty = true;
-              params.api.applyTransaction({ update: [params.data] });
-            }
+          onCellValueChanged={onCellValueChanged}
+          rowClassRules={{
+            "unsaved-row": (p) => p.data?._isDirty === true,
           }}
-          rowClassRules={{ "unsaved-row": (p) => p.data?._isDirty === true }}
           theme="legacy"
         />
       </div>
@@ -213,7 +347,7 @@ const DataManagerGrid = () => {
         <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
           Prev
         </button>
-        <span> Page {Math.floor(page)} </span>
+        <span> Page {page} </span>
         <button
           disabled={page * pageSize >= totalRows}
           onClick={() => setPage((p) => p + 1)}

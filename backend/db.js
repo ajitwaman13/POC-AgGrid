@@ -5,13 +5,13 @@ const inventorySchema = new mongoose.Schema(
     // Core identity
     sku: {
       type: String,
-      required: true,
+
       unique: true,
       index: true,
     },
     name: {
       type: String,
-      required: true,
+
       index: true,
     },
     description: {
@@ -34,11 +34,10 @@ const inventorySchema = new mongoose.Schema(
     // Pricing
     costPrice: {
       type: Number,
-      required: true,
     },
     sellingPrice: {
       type: Number,
-      required: true,
+
       index: true,
     },
     discountPercent: {
@@ -53,7 +52,7 @@ const inventorySchema = new mongoose.Schema(
     // Stock & warehouse
     quantityInStock: {
       type: Number,
-      required: true,
+
       index: true,
     },
     minimumStockLevel: {

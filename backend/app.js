@@ -400,6 +400,14 @@ app.put("/bulk-update", async (req, res) => {
     });
   }
 });
+
+// new data
+app.post("/data/bulk-create", async (req, res) => {
+  console.log(req.body);
+  const newdata = await Inventory.insertMany(req.body.rows);
+  console.log(newdata);
+  res.status(200).json({ newdata });
+});
 app.listen(3000, () => {
   console.log("server runing at the 3000");
 });
