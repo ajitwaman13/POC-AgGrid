@@ -6,6 +6,8 @@ import React, {
   useCallback,
 } from "react";
 import { AgGridReact } from "ag-grid-react";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
@@ -35,19 +37,19 @@ const DataManagerGrid = () => {
     },
   ]);
 
+  // --- 1. DATA LOADING ---
   const loadData = useCallback(async () => {
-    const api = gridRef.current?.api;
-    if (!api) return;
+    if (!gridApi) return;
 
     setLoading(true);
     const payload = {
       page,
       limit: pageSize,
-      sortModel: api
+      sortModel: gridApi
         .getColumnState()
         .filter((c) => c.sort)
         .map((c) => ({ colId: c.colId, sort: c.sort })),
-      filterModel: api.getFilterModel(),
+      filterModel: gridApi.getFilterModel(),
     };
 
     try {
@@ -64,16 +66,15 @@ const DataManagerGrid = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize]);
+  }, [page, pageSize, gridApi]);
 
   useEffect(() => {
     if (gridApi) loadData();
   }, [page, pageSize, gridApi, loadData]);
 
+  // --- 2. COLUMN DEFINITIONS ---
   const columnDefs = useMemo(
     () => [
-      // { field: "_id" },
-
       {
         field: "sku",
         sortable: true,
@@ -83,7 +84,6 @@ const DataManagerGrid = () => {
       { field: "name", editable: true, filter: "agTextColumnFilter" },
       { field: "category", editable: true, filter: "agTextColumnFilter" },
       { field: "sellingPrice", editable: true, filter: "agNumberColumnFilter" },
-
       {
         field: "discountPercent",
         editable: true,
@@ -101,7 +101,6 @@ const DataManagerGrid = () => {
           return true;
         },
       },
-
       {
         field: "taxPercent",
         editable: true,
@@ -121,7 +120,6 @@ const DataManagerGrid = () => {
             Number(params.data?.discountPercent),
         },
       },
-
       {
         field: "quantityInStock",
         editable: true,
@@ -153,169 +151,185 @@ const DataManagerGrid = () => {
     }
   };
 
-  //  update
-  const onSave = async () => {
-    const changedRows = [];
-    const changedNodes = [];
+  const onFileUploaded = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-    gridRef.current.api.forEachNode((node) => {
-      if (node.data._isDirty && !node.data._isNew) {
-        changedRows.push(node.data);
-        changedNodes.push(node);
-      }
-    });
-
-    if (!changedRows.length) {
-      alert("No changes detected");
-      return;
-    }
-
-    try {
-      await fetch("http://localhost:3000/bulk-update", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: changedRows }),
-      });
-
-      alert("Saved Successfully");
-
-      changedNodes.forEach((node) => node.setDataValue("_isDirty", false));
-
-      loadData();
-    } catch {
-      alert("Save failed!");
-    }
-  };
-
-  // add the row
-  // const addData = async () => {
-  //   gridRef.current.api.stopEditing();
-  //   const pinnedRow = pinnedTopRowData[0];
-  //   const { _isNew, _isDirty, ...cleanData } = pinnedRow;
-  //   console.log("new data ", cleanData);
-
-  //   setLoading(true);
-  //   try {
-  //     const res = await fetch("http://localhost:3000/data/bulk-create", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ rows: [cleanData] }),
-  //     });
-
-  //     const data = await res.json();
-  //     console.log("Data", data);
-
-  //     const result = gridRef.current.api.applyTransaction({
-  //       add: [data],
-  //       addIndex: 0,
-  //     });
-  //     //   in built fun to show new row in top
-  //     if (result.add && result.add.length > 0) {
-  //       const addedNode = result.add[0];
-
-  //       gridRef.current.api.flashCells({
-  //         rowNodes: [addedNode],
-  //         flashDuration: 3000,
-  //         fadeDuration: 1000,
-  //       });
-
-  //       gridRef.current.api.ensureIndexVisible(0, "top");
-  //     }
-  //     setPinnedTopRowData([
-  //       {
-  //         sku: "",
-  //         name: "",
-  //         category: "",
-  //         sellingPrice: null,
-  //         discountPercent: null,
-  //         taxPercent: null,
-  //         quantityInStock: null,
-  //         minimumStockLevel: null,
-  //         isActive: true,
-  //         _isNew: true,
-  //         _isDirty: false,
-  //       },
-  //     ]);
-  //     alert("New data saved successfully!");
-  //     // loadData();
-  //   } catch (error) {
-  //     alert("Server error occurred.");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-  const addData = async () => {
-    // gridRef.current.api.stopEditing();
-    const pinnedRow = pinnedTopRowData[0];
-    const { _isNew, _isDirty, ...cleanData } = pinnedRow;
+    const formData = new FormData();
+    formData.append("file", file);
 
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:3000/data/bulk-create", {
+      const response = await fetch("http://localhost:3000/upload-excel", {
+        method: "POST",
+        body: formData,
+      });
+
+      const rawData = await response.json();
+
+      // 1. NORMALIZE KEYS: Convert "SKU" to "sku", "NAME" to "name", etc.
+      const normalizedData = rawData.map((item) => ({
+        sku: item.SKU,
+        name: item.NAME,
+        category: item.CATEGORY,
+        sellingPrice: item.SELLINGPRICE,
+        discountPercent: item.DISCOUNTPERCENT,
+        taxPercent: item.TAXPERCENT,
+        quantityInStock: item.QUANTITYINSTOCK,
+        minimumStockLevel: item.MINIMUMSTOCKLEVEL,
+        isActive: item.ISACTIVE,
+      }));
+
+      const updates = [];
+      const additions = [];
+
+      normalizedData.forEach((newRow) => {
+        const existing = rowData.find((r) => r.sku === newRow.sku);
+
+        if (existing) {
+          // It's an update - this will now trigger correctly!
+          updates.push({
+            ...existing,
+            ...newRow,
+            _isDirty: true,
+            _isNew: false,
+          });
+        } else {
+          // It's new
+          additions.push({
+            ...newRow,
+            _isDirty: true,
+            _isNew: true,
+          });
+        }
+      });
+
+      // 3. APPLY TO GRID
+      if (updates.length > 0) gridApi.applyTransaction({ update: updates });
+      if (additions.length > 0)
+        gridApi.applyTransaction({ add: additions, addIndex: 0 });
+
+      alert(
+        `Excel Processed: ${additions.length} new records and ${updates.length} updates found.`
+      );
+    } catch (error) {
+      console.error("Upload failed", error);
+      alert("Error processing file. Check console.");
+    } finally {
+      setLoading(false);
+      event.target.value = null;
+    }
+  };
+
+  const onSave = async () => {
+    const dirtyRows = [];
+    gridApi.forEachNode((node) => {
+      if (node.data._isDirty) dirtyRows.push(node.data);
+    });
+
+    if (dirtyRows.length === 0) return alert("No changes to save");
+
+    setLoading(true);
+    try {
+      // Calling the Upsert endpoint we created in the backend
+      const res = await fetch("http://localhost:3000/data/bulk-sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: [cleanData] }),
+        body: JSON.stringify({ rows: dirtyRows }),
       });
 
-      const responseJson = await res.json();
-
-      const rowToInsert = responseJson.newdata && responseJson.newdata[0];
-
-      const result = gridRef.current.api.applyTransaction({
-        add: [rowToInsert],
-        addIndex: 0,
-      });
-
-      if (result.add && result.add.length > 0) {
-        const addedNode = result.add[0];
-        gridRef.current.api.flashCells({
-          rowNodes: [addedNode],
-          flashDuration: 3000,
-        });
-        gridRef.current.api.ensureIndexVisible(0, "top");
+      if (res.ok) {
+        alert("Saved Successfully!");
+        await loadData(); // Refresh to get real MongoDB IDs
       }
-
-      setPinnedTopRowData([
-        {
-          sku: "",
-          name: "",
-          category: "",
-          sellingPrice: null,
-          discountPercent: null,
-          taxPercent: null,
-          quantityInStock: null,
-          minimumStockLevel: null,
-          isActive: true,
-          _isNew: true,
-          _isDirty: false,
-        },
-      ]);
-
-      alert("New data saved successfully!");
-
-      setTotalRows((prev) => prev + 1);
-    } catch (error) {
-      console.error(error);
-      alert("Server error occurred.");
+    } catch (err) {
+      alert("Save failed!");
     } finally {
       setLoading(false);
     }
   };
 
-  const triggerRefresh = () => {
-    if (page === 1) loadData();
-    else setPage(1);
+  const exportToExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Inventory Data");
+
+    worksheet.columns = columnDefs.map((col) => ({
+      header: col.field.toUpperCase(),
+      key: col.field,
+      width: 20,
+    }));
+
+    gridApi.forEachNodeAfterFilterAndSort((node) => {
+      worksheet.addRow(node.data);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), "Inventory_Export.xlsx");
+  };
+
+  // --- 7. ADD SINGLE ROW ---
+  const addData = async () => {
+    gridApi.stopEditing();
+    const { _isNew, _isDirty, ...cleanData } = pinnedTopRowData[0];
+
+    setLoading(true);
+    try {
+      // Use bulk-sync even for single row addition
+      const res = await fetch("http://localhost:3000/data/bulk-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows: [cleanData] }),
+      });
+
+      if (res.ok) {
+        alert("New record saved!");
+        loadData();
+        setPinnedTopRowData([
+          {
+            sku: "",
+            name: "",
+            category: "",
+            sellingPrice: null,
+            discountPercent: null,
+            taxPercent: null,
+            quantityInStock: null,
+            minimumStockLevel: null,
+            isActive: true,
+            _isNew: true,
+            _isDirty: false,
+          },
+        ]);
+      }
+    } catch (error) {
+      alert("Server error.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="container">
-      <div style={{ marginBottom: 10, display: "flex", gap: 10 }}>
+      <div
+        style={{
+          marginBottom: 15,
+          display: "flex",
+          gap: 10,
+          alignItems: "center",
+        }}
+      >
         <button onClick={onSave} disabled={loading}>
           Save Changes
         </button>
         <button onClick={addData} disabled={loading}>
           Add Row
         </button>
+        {/* <button onClick={exportToExcel}>Export Excel</button> */}
+        <input
+          type="file"
+          accept=".xlsx, .xls"
+          onChange={onFileUploaded}
+          disabled={loading}
+        />
         {loading && <span>Loading...</span>}
       </div>
 
@@ -332,14 +346,10 @@ const DataManagerGrid = () => {
             floatingFilter: true,
           }}
           onGridReady={(params) => setGridApi(params.api)}
-          onSortChanged={triggerRefresh}
-          onFilterChanged={triggerRefresh}
-          getRowId={(params) => params.data._id}
+          getRowId={(params) => params.data._id || params.data.sku}
           onCellValueChanged={onCellValueChanged}
-          rowClassRules={{
-            "unsaved-row": (p) => p.data?._isDirty === true,
-          }}
-          theme="legacy"
+          rowClassRules={{ "unsaved-row": (p) => p.data?._isDirty === true }}
+          theme={"legacy"}
         />
       </div>
 
@@ -354,17 +364,6 @@ const DataManagerGrid = () => {
         >
           Next
         </button>
-        <select
-          value={pageSize}
-          onChange={(e) => {
-            setPageSize(Number(e.target.value));
-            setPage(1);
-          }}
-        >
-          <option value={20}>20</option>
-          <option value={50}>50</option>
-          <option value={100}>100</option>
-        </select>
       </div>
     </div>
   );

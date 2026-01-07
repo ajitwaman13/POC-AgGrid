@@ -1,0 +1,16 @@
+/* highlight unsaved / dirty rows */
+.ag-theme-alpine .unsaved-row {
+  background-color: yellow !important; /* light yellow */
+}
+
+.low-stock-cell {
+  background-color: #fdecea;   /* light red */
+  color: #8b0000;              /* dark red */
+  font-weight: bold;
+}
+
+.tax-invalid {
+  background-color: #f00404;
+  border: 1px solid #b40b0e;
+}
+

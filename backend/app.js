@@ -1,6 +1,8 @@
 import express from "express";
 import mongoose from "mongoose";
 import Inventory from "./db.js";
+import multer from "multer";
+import xlsx from "xlsx";
 import cors from "cors";
 const app = express();
 
@@ -373,11 +375,11 @@ app.put("/bulk-update", async (req, res) => {
 
     // 2️⃣ Prepare bulk operations
     const bulkOps = rows.map((row) => {
-      const { _id, ...updateData } = row; // ❌ remove _id from update
+      const { _id, ...updateData } = row; //remove _id from update
 
       return {
         updateOne: {
-          filter: { _id: new mongoose.Types.ObjectId(_id) }, // ✅ ObjectId
+          filter: { _id: new mongoose.Types.ObjectId(_id) }, // ObjectId
           update: { $set: updateData },
         },
       };
@@ -408,6 +410,43 @@ app.post("/data/bulk-create", async (req, res) => {
   console.log(newdata);
   res.status(200).json({ newdata });
 });
+
+const upload = multer({ storage: multer.memoryStorage() });
+app.post("/upload-excel", upload.single("file"), (req, res) => {
+  try {
+    console.log("file recived", req.file);
+    const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+    const jsonData = xlsx.utils.sheet_to_json(
+      workbook.Sheets[workbook.SheetNames[0]]
+    );
+    console.log(jsonData);
+    res.status(200).json(jsonData);
+  } catch (error) {
+    res.status(500).json({ error: "Excel parse failed" });
+  }
+});
+
+// 2. Smart Sync (Upsert)
+app.post("/data/bulk-sync", async (req, res) => {
+  try {
+    const { rows } = req.body;
+    const bulkOps = rows.map((row) => {
+      const { _id, _isDirty, _isNew, ...cleanData } = row;
+      return {
+        updateOne: {
+          filter: { sku: cleanData.sku }, // Unique Identifier
+          update: { $set: cleanData },
+          upsert: true, // Create if not found
+        },
+      };
+    });
+    const result = await Inventory.bulkWrite(bulkOps);
+    res.status(200).json({ message: "Sync successful", result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(3000, () => {
   console.log("server runing at the 3000");
 });
