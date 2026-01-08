@@ -171,18 +171,19 @@ const ExcelInventoryGrid = () => {
 
       normalizedData.forEach((newRow) => {
         const existing = rowData.find((r) => r.sku === newRow.sku);
+        console.log("existing data ", existing);
 
         if (existing) {
-          // Check if the Excel data is exactly the same as the DB data
           const isPerfectMatch = Object.keys(newRow).every(
             (key) => newRow[key] === existing[key]
           );
+          console.log("isPerfectMatch", isPerfectMatch);
 
           updates.push({
             ...existing,
             ...newRow,
-            _isDirty: !isPerfectMatch, // Only dirty if it's NOT a match
-            _isPerfectMatch: isPerfectMatch, // New readable flag
+            _isDirty: !isPerfectMatch, //not match it
+            _isPerfectMatch: isPerfectMatch, // match it
           });
         } else {
           additions.push({
@@ -210,6 +211,7 @@ const ExcelInventoryGrid = () => {
 
   const onSaveExcel = async () => {
     const dirtyRows = [];
+    console.log(dirtyRows);
     gridApi.forEachNode((node) => {
       if (node.data._isDirty) dirtyRows.push(node.data);
     });
@@ -234,12 +236,6 @@ const ExcelInventoryGrid = () => {
 
   return (
     <div className="container">
-      {/* ADD THIS CSS BLOCK TO YOUR COMPONENT OR CSS FILE */}
-      <style>{`
-        .modified-data-row { background-color: #fff9c4 !important; } /* Yellow */
-        .excel-data-match { background-color: #c8e6c9 !important; }  /* Green */
-      `}</style>
-
       <div
         style={{
           marginBottom: 15,
