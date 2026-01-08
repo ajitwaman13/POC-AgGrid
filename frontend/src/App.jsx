@@ -4,6 +4,7 @@ import CustomAgrid from "./components/CustomAgrid";
 import CustomAgridAutoSave from "./components/CustomAgridAutoSave";
 import ComboBox from "./components/ComboBox";
 import DataManagerGrid from "./DataManagerGrid";
+import ExcelInventoryGrid from "./ExcelInventoryGrid";
 const App = () => {
   return (
     <div>
@@ -16,7 +17,8 @@ const App = () => {
 
       {/* <ComboBox /> */}
 
-      <DataManagerGrid />
+      {/* <DataManagerGrid /> */}
+      <ExcelInventoryGrid />
     </div>
   );
 };

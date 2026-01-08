@@ -360,7 +360,7 @@ app.post("/data", async (req, res) => {
 //     });
 //   }
 // });
-app.put("/bulk-update", async (req, res) => {
+app.put("/bulk/update", async (req, res) => {
   try {
     console.log("Bulk update API hit");
 
@@ -441,6 +441,7 @@ app.post("/data/bulk-sync", async (req, res) => {
       };
     });
     const result = await Inventory.bulkWrite(bulkOps);
+    console.log(result);
     res.status(200).json({ message: "Sync successful", result });
   } catch (error) {
     res.status(500).json({ error: error.message });
