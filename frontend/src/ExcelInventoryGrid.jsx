@@ -9,6 +9,8 @@ import { AgGridReact } from "ag-grid-react";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 
+import "ag-grid-enterprise";
+
 const ExcelInventoryGrid = () => {
   const gridRef = useRef();
   const [rowData, setRowData] = useState([]);
@@ -36,7 +38,7 @@ const ExcelInventoryGrid = () => {
 
   const loadData = useCallback(async () => {
     if (!gridApi) return;
-
+    console.log("gridApi.getFilterModel()", gridApi.getFilterModel());
     const payload = {
       page,
       limit: pageSize,
@@ -124,8 +126,8 @@ const ExcelInventoryGrid = () => {
   );
 
   const onCellValueChanged = (params) => {
-    // If user manually edits, it's no longer a "perfect match" from the file
     params.data._isPerfectMatch = false;
+    console.log("on cell work ..", params);
 
     if (params.node.rowPinned === "top") {
       params.data._isDirty = true;
@@ -135,15 +137,17 @@ const ExcelInventoryGrid = () => {
 
     if (params.oldValue !== params.newValue) {
       params.data._isDirty = true;
+      console.log("on cell value is ", params.data);
       params.api.applyTransaction({ update: [params.data] });
     }
   };
-
+  //upload the excel file
   const onFileUploaded = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
+    console.log(formData);
     formData.append("file", file);
 
     try {
@@ -168,7 +172,8 @@ const ExcelInventoryGrid = () => {
 
       const updates = [];
       const additions = [];
-
+      console.log("updates", updates);
+      console.log("additions", additions);
       normalizedData.forEach((newRow) => {
         const existing = rowData.find((r) => r.sku === newRow.sku);
         console.log("existing data ", existing);
@@ -211,9 +216,12 @@ const ExcelInventoryGrid = () => {
 
   const onSaveExcel = async () => {
     const dirtyRows = [];
-    console.log(dirtyRows);
+    console.log("dirtyRows", dirtyRows);
     gridApi.forEachNode((node) => {
-      if (node.data._isDirty) dirtyRows.push(node.data);
+      if (node.data._isDirty) {
+        console.log("node.data", node.data);
+        dirtyRows.push(node.data);
+      } //
     });
 
     if (dirtyRows.length === 0) return alert("No changes to save");
@@ -253,6 +261,8 @@ const ExcelInventoryGrid = () => {
           ref={gridRef}
           rowData={rowData}
           pinnedTopRowData={pinnedTopRowData}
+          onSortChanged={loadData}
+          onFilterChanged={loadData}
           columnDefs={columnDefs}
           defaultColDef={{
             flex: 1,

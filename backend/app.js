@@ -195,12 +195,18 @@ app.post("/data", async (req, res) => {
       const f = filterModel[field];
 
       /* ===== BOOLEAN (IMPORTANT FIX) ===== */
-      if (field === "isActive") {
-        const parsed = parseBoolean(f.filter);
-        if (parsed !== null) {
-          filterQuery[field] = parsed;
-        }
-        continue; // ⛔ stop here for boolean
+      // if (field === "isActive") {
+      //   const parsed = parseBoolean(f.filter);
+      //   if (parsed !== null) {
+      //     filterQuery[field] = parsed;
+      //   }
+      //   continue; // ⛔ stop here for boolean
+      // }
+      if (field === "isActive" && f.filterType === "set") {
+        // Convert strings ["true", "false"] back to actual Booleans [true, false]
+        const booleanValues = f.values.map((val) => val === "true");
+        filterQuery[field] = { $in: booleanValues };
+        continue;
       }
 
       /* ===== TEXT ===== */
@@ -365,8 +371,8 @@ app.put("/bulk/update", async (req, res) => {
     console.log("Bulk update API hit");
 
     const { rows } = req.body;
+    console.log("ROw ", rows);
 
-    // 1️⃣ Validate request
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({
         message: "rows must be a non-empty array",

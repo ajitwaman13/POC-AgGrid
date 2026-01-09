@@ -1,7 +1,8 @@
-import React, { useRef, useMemo, useCallback, useState } from "react";
+import React, { useRef, useMemo, useCallback } from "react";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-enterprise";
 import "ag-grid-community/styles/ag-grid.css";
+
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 const PAGE_SIZE = 20;
@@ -10,25 +11,12 @@ const paginationPageSizeSelector = [10, 20, 50, 100];
 const ExcelInventoryEnterpriseGrid = () => {
   const gridRef = useRef(null);
 
-  // State to track changes locally before they are pushed to the backend
-  const [unsavedRows, setUnsavedRows] = useState([]);
-
   const columnDefs = useMemo(
     () => [
       {
         field: "sku",
         filter: "agTextColumnFilter",
         editable: false,
-        // Visual indicator for unsaved data
-        cellStyle: (params) => {
-          if (params.data.isUnsaved) {
-            return {
-              borderLeft: "4px solid #ff9800",
-              backgroundColor: "rgba(255, 152, 0, 0.1)",
-            };
-          }
-          return null;
-        },
       },
       {
         field: "name",
@@ -80,38 +68,13 @@ const ExcelInventoryEnterpriseGrid = () => {
     []
   );
 
-  // --- INTERCEPT PASTE LOGIC ---
-  const onPaste = useCallback((event) => {
-    const rawData = event.clipboardData.getData("text");
-
-    try {
-      // Attempt to parse if it's JSON
-      const json = JSON.parse(rawData);
-      const itemsToUpdate = Array.isArray(json) ? json : [json];
-
-      const newItems = itemsToUpdate.map((item) => ({
-        ...item,
-        isUnsaved: true, // Tag as unsaved for user review
-      }));
-
-      // Enterprise Transaction: Updates the UI without calling the server yet
-      gridRef.current.api.applyServerSideTransaction({
-        update: newItems,
-      });
-
-      setUnsavedRows((prev) => [...prev, ...newItems]);
-      event.preventDefault(); // Prevent standard browser paste
-    } catch (e) {
-      // Not JSON? AG Grid handles Excel/CSV paste automatically
-      console.log("Processing standard paste...");
-    }
-  }, []);
-
   const serverSideDatasource = useCallback(
     () => ({
       getRows: async (params) => {
+        console.log("Request", params.request);
         const { startRow, sortModel, filterModel } = params.request;
 
+        // backend payload
         const payload = {
           page: Math.floor(startRow / PAGE_SIZE) + 1,
           limit: PAGE_SIZE,
@@ -133,87 +96,58 @@ const ExcelInventoryEnterpriseGrid = () => {
             rowCount: data.total,
           });
         } catch (err) {
-          console.error("failed to the fetching data ", err);
+          console.error("failed to the feteching data ", err);
           params.fail();
         }
       },
     }),
     []
   );
-
+  // thinking like this is useEffect call only once
   const onGridReady = useCallback(
     (params) => {
+      console.log("call on gridready or change ..", params);
       params.api.setGridOption("serverSideDatasource", serverSideDatasource());
     },
     [serverSideDatasource]
   );
 
-  // --- SYNC TO BACKEND ---
-  const handleBulkSave = async () => {
-    if (unsavedRows.length === 0) return;
-
+  const onCellValueChanged = async (params) => {
+    if (params.oldValue === params.newValue) return;
+    console.log("on cell change", params.data);
     try {
       await fetch("http://localhost:3000/data/bulk-sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: unsavedRows }),
+        body: JSON.stringify({ rows: [params.data] }),
       });
-
-      setUnsavedRows([]);
-      gridRef.current.api.refreshServerSide();
-      alert("Changes saved to database!");
     } catch (err) {
       console.error("Save failed", err);
     }
   };
 
   return (
-    <div
-      className="ag-theme-quartz-dark"
-      style={{ height: 650 }}
-      onPaste={onPaste}
-    >
-      <div style={{ padding: "10px", display: "flex", gap: "10px" }}>
-        {unsavedRows.length > 0 && (
-          <button
-            onClick={handleBulkSave}
-            style={{
-              backgroundColor: "#ff9800",
-              color: "black",
-              padding: "10px",
-              cursor: "pointer",
-              border: "none",
-              borderRadius: "4px",
-            }}
-          >
-            Save {unsavedRows.length} Unsaved Changes
-          </button>
-        )}
-      </div>
-
+    <div className="ag-theme-quartz-dark" style={{ height: 650 }}>
       <AgGridReact
         ref={gridRef}
         columnDefs={columnDefs}
+        // def col
         defaultColDef={defaultColDef}
-        rowModelType="serverSide"
+        onFilterChanged={true}
+        // pagination
         pagination={true}
         paginationPageSize={PAGE_SIZE}
         paginationPageSizeSelector={paginationPageSizeSelector}
         cacheBlockSize={PAGE_SIZE}
+        //  server side
+        rowModelType="serverSide"
+        // some animations
         animateRows
         onGridReady={onGridReady}
-        // Identifies manual edits for review
-        onCellValueChanged={(params) => {
-          if (params.oldValue !== params.newValue) {
-            params.data.isUnsaved = true;
-            setUnsavedRows((prev) => [...prev, params.data]);
-            gridRef.current.api.refreshCells({
-              rowNodes: [params.node],
-              force: true,
-            });
-          }
-        }}
+        // something change the inline editing ,
+        onCellValueChanged={onCellValueChanged}
         theme={"legacy"}
+        groupDisplayType="multipleColumns"
       />
     </div>
   );
