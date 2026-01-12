@@ -23,12 +23,14 @@ const ExcelInventoryEnterpriseGrid = () => {
       {
         field: "sku",
         filter: "agTextColumnFilter",
+        cellRenderer: (params) => (
+          <span style={{ fontWeight: "bold" }}>{params.value}</span>
+        ),
       },
       {
         field: "category",
         filter: "agSetColumnFilter",
-        // filterParams: { values: ["Electronics", "Clothing", "Home", "Toys"] },
-        editable: true,
+        filterParams: { values: ["Electronics", "Clothing", "Home", "Toys"] },
       },
       // {
       //   field: "quantityInStock",
@@ -39,8 +41,8 @@ const ExcelInventoryEnterpriseGrid = () => {
       {
         field: "sellingPrice",
         filter: "agNumberColumnFilter",
-        valueFormatter: (price) =>
-          price.value ? `$${price.value.toFixed(2)}` : "",
+        aggFunc: "avg",
+        valueFormatter: (p) => (p.value ? `$${p.value.toFixed(2)}` : ""),
       },
       {
         field: "discountPercent",
@@ -114,58 +116,27 @@ const ExcelInventoryEnterpriseGrid = () => {
   );
 
   //
-  // const autoGroupColumnDef = useMemo(
-  //   () => ({
-  //     headerName: "Warehouse Hierarchy",
-  //     minWidth: 250,
-  //     cellRendererParams: {
-  //       checkbox: true,
-  //     },
-  //   }),
-  //   []
-  // );
+  const autoGroupColumnDef = useMemo(
+    () => ({
+      headerName: "Warehouse Hierarchy",
+      minWidth: 250,
+      cellRendererParams: {
+        checkbox: true,
+      },
+    }),
+    []
+  );
 
-  //  copy the data from the excel put into the grid
-  const copyToClipboard = useCallback((params) => {
-    console.log("copying the data ", params.value);
-    // gridRef.current.api.copySelectedRowsToClipboard();
-  }, []);
-
-  // export to excel
   const exportTOExcel = useCallback(() => {
     gridRef.current.api.exportDataAsExcel();
   }, []);
 
-  //  server side datasource
   const serverSideDatasource = useCallback(
     () => ({
       
       getRows: async (params) => {
         console.log("SSRM Request:", params.request);
         console.log("Group Keys:", params.request.groupKeys);
-
-        // if (params.request.groupKeys) {
-        //   console.log(
-        //     "is array groupKeys?",
-        //     Array.isArray(params.request.groupKeys)
-        //   );
-        //   console.log(
-        //     "is array rowGroupCols ?",
-        //     Array.isArray(params.request.rowGroupCols)
-        //   );
-        //   console.log(
-        //     "is array sortModel ?",
-        //     Array.isArray(params.request.sortModel)
-        //   );
-        //   console.log(
-        //     "is array filterModel ?",
-        //     Array.isArray(params.request.filterModel)
-        //   );
-        //   console.log(
-        //     "is array valueCols ?",
-        //     Array.isArray(params.request.valueCols)
-        //   );
-        // }
         console.log("Row Group Cols:", params.request.rowGroupCols);
         console.log("Sort Model:", params.request.sortModel);
         console.log("Filter Model:", params.request.filterModel);
@@ -208,7 +179,7 @@ const ExcelInventoryEnterpriseGrid = () => {
     }),
     []
   );
-  // hit the backend
+
   const onGridReady = useCallback(
     (params) => {
       params.api.setGridOption("serverSideDatasource", serverSideDatasource());
@@ -232,17 +203,15 @@ const ExcelInventoryEnterpriseGrid = () => {
         // Core Config
         columnDefs={columnDefs}
         defaultColDef={defaultColDef}
+        autoGroupColumnDef={autoGroupColumnDef}
         // Server-Side Specifics
         rowModelType="serverSide"
         onGridReady={onGridReady}
-        // pagination
-        pagination={true}
         cacheBlockSize={PAGE_SIZE}
-        //grouping
-        rowGroupPanelShow="always"
-        groupDisplayType="groupRows"
-        animateRows={true}
-        rowSelection="multiple"
+        // rowGroupPanelShow="always"
+        // groupDisplayType="groupRows"
+        // animateRows={true}
+        // rowSelection="multiple"
         // Selection & Persistence
         suppressAggFuncInHeader={true}
         getServerSideGroupKey={(dataItem) => dataItem.warehouseLocation}
@@ -253,33 +222,7 @@ const ExcelInventoryEnterpriseGrid = () => {
         }}
         theme={"legacy"}
         // editType="singleCell"
-        // editType="fullRow"
-        stopEditingWhenCellsLoseFocus={true}
-        onCellValueChanged={(params) => {
-          if (params.oldValue !== params.newValue) {
-            params.api.refreshCells({
-              rowNodes: [params.node],
-              force: true,
-            });
-            const cleanRow = { ...params.data };
-            console.log("Row to be sent to backend:", cleanRow);
-
-            const data = fetch("http://localhost:3000/data/bulk-sync", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                rows: [cleanRow],
-              }),
-            }).then((res) => {
-              if (res.ok) {
-                console.log("Row saved successfully");
-                console.log(res.json());
-              }
-            });
-          }
-        }}
-        cellSelection="true"
-        copyHeadersToClipboard={true}
+        editType="fullRow"
       />
     </div>
   );
