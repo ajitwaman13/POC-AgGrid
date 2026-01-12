@@ -18,6 +18,12 @@ import {
   StatusBarModule,
   RowGroupingModule,
   ExcelExportModule,
+  CsvExportModule,
+  RowGroupingPanelModule,
+  FiltersToolPanelModule,
+  ColumnsToolPanelModule,
+  CellSelectionModule,
+  ClipboardModule,
 } from "ag-grid-enterprise";
 
 ModuleRegistry.registerModules([
@@ -31,6 +37,12 @@ ModuleRegistry.registerModules([
   StatusBarModule,
   RowGroupingModule,
   ExcelExportModule,
+  CsvExportModule,
+  RowGroupingPanelModule,
+  FiltersToolPanelModule,
+  ColumnsToolPanelModule,
+  CellSelectionModule,
+  ClipboardModule,
 ]);
 
 createRoot(document.getElementById("root")).render(<App />);

@@ -125,9 +125,8 @@ const ExcelInventoryEnterpriseGrid = () => {
   // );
 
   //  copy the data from the excel put into the grid
-  const copyToClipboard = useCallback((params) => {
-    console.log("copying the data ", params.value);
-    // gridRef.current.api.copySelectedRowsToClipboard();
+  const copyToClipboard = useCallback(() => {
+    gridRef.current.api.copySelectedRowsToClipboard();
   }, []);
 
   // export to excel
@@ -142,28 +141,28 @@ const ExcelInventoryEnterpriseGrid = () => {
         console.log("SSRM Request:", params.request);
         console.log("Group Keys:", params.request.groupKeys);
 
-        // if (params.request.groupKeys) {
-        //   console.log(
-        //     "is array groupKeys?",
-        //     Array.isArray(params.request.groupKeys)
-        //   );
-        //   console.log(
-        //     "is array rowGroupCols ?",
-        //     Array.isArray(params.request.rowGroupCols)
-        //   );
-        //   console.log(
-        //     "is array sortModel ?",
-        //     Array.isArray(params.request.sortModel)
-        //   );
-        //   console.log(
-        //     "is array filterModel ?",
-        //     Array.isArray(params.request.filterModel)
-        //   );
-        //   console.log(
-        //     "is array valueCols ?",
-        //     Array.isArray(params.request.valueCols)
-        //   );
-        // }
+        if (params.request.groupKeys) {
+          console.log(
+            "is array groupKeys?",
+            Array.isArray(params.request.groupKeys)
+          );
+          console.log(
+            "is array rowGroupCols ?",
+            Array.isArray(params.request.rowGroupCols)
+          );
+          console.log(
+            "is array sortModel ?",
+            Array.isArray(params.request.sortModel)
+          );
+          console.log(
+            "is array filterModel ?",
+            Array.isArray(params.request.filterModel)
+          );
+          console.log(
+            "is array valueCols ?",
+            Array.isArray(params.request.valueCols)
+          );
+        }
         console.log("Row Group Cols:", params.request.rowGroupCols);
         console.log("Sort Model:", params.request.sortModel);
         console.log("Filter Model:", params.request.filterModel);
@@ -242,6 +241,7 @@ const ExcelInventoryEnterpriseGrid = () => {
         groupDisplayType="groupRows"
         animateRows={true}
         rowSelection="multiple"
+        // autoGroupColumnDef={autoGroupColumnDef}
         // Selection & Persistence
         suppressAggFuncInHeader={true}
         getServerSideGroupKey={(dataItem) => dataItem.warehouseLocation}
@@ -277,8 +277,15 @@ const ExcelInventoryEnterpriseGrid = () => {
             });
           }
         }}
-        cellSelection="true"
-        copyHeadersToClipboard={true}
+        // copy and past the data from excel
+        // 1. New way to enable range selection in v35
+        cellSelection={true}
+        // 2. This remains the same to allow pasting
+        processPasteFromClipboard={(params) => params.value}
+        // 3. New way to enable the drag-to-fill handle (if you want it)
+
+        // Optional: Allows you to undo a bad paste with Ctrl+Z
+        undoRedoCellEditing={true}
       />
     </div>
   );

@@ -182,8 +182,9 @@ const DataManagerGrid = () => {
 
       const updates = [];
       const additions = [];
-
+      console.log(rowData);
       normalizedData.forEach((newRow) => {
+        // console.log("row data ",new)
         const existing = rowData.find((r) => r.sku === newRow.sku);
 
         if (existing) {
