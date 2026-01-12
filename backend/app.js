@@ -176,48 +176,33 @@ app.get("/test", (req, res) => {
 // cors setup
 app.post("/data", async (req, res) => {
   try {
-    const { page = 1, limit = 20, sortModel = [], filterModel = {} } = req.body;
+    const {
+      page = 1,
+      limit = 20,
+      sortModel = [],
+      filterModel = {},
+      groupKeys = [], // Received from AG Grid
+      rowGroupCols = [], // Received from AG Grid
+    } = req.body;
 
-    console.log("➡️ BACKEND BODY:", req.body);
+    console.log("BACKEND REQUEST - groupKeys:", groupKeys);
 
     const skip = (page - 1) * limit;
 
-    /* ===== SORT ===== */
-    const sortQuery = {};
-    if (sortModel.length) {
-      sortQuery[sortModel[0].colId] = sortModel[0].sort === "asc" ? 1 : -1;
-    }
-
-    /* ===== FILTER ===== */
+    /* ===== 1. BUILD FILTERS (Your existing logic) ===== */
     const filterQuery = {};
-
     for (const field in filterModel) {
       const f = filterModel[field];
-
-      /* ===== BOOLEAN (IMPORTANT FIX) ===== */
-      // if (field === "isActive") {
-      //   const parsed = parseBoolean(f.filter);
-      //   if (parsed !== null) {
-      //     filterQuery[field] = parsed;
-      //   }
-      //   continue; // ⛔ stop here for boolean
-      // }
       if (field === "isActive" && f.filterType === "set") {
-        // Convert strings ["true", "false"] back to actual Booleans [true, false]
-        const booleanValues = f.values.map((val) => val === "true");
+        const booleanValues = f.values.map(
+          (val) => val === "true" || val === true
+        );
         filterQuery[field] = { $in: booleanValues };
         continue;
       }
-
-      /* ===== TEXT ===== */
       if (f.filterType === "text") {
-        filterQuery[field] = {
-          $regex: f.filter,
-          $options: "i",
-        };
+        filterQuery[field] = { $regex: f.filter, $options: "i" };
       }
-
-      /* ===== NUMBER ===== */
       if (f.filterType === "number") {
         const value = Number(f.filter);
         if (f.type === "equals") filterQuery[field] = value;
@@ -226,9 +211,61 @@ app.post("/data", async (req, res) => {
       }
     }
 
-    console.log("📦 FINAL FILTER:", filterQuery);
-    console.log("↕️ SORT:", sortQuery);
-    console.log("📏 SKIP:", skip, "LIMIT:", limit);
+    /* ===== 2. HANDLE GROUPING LOGIC ===== */
+
+    // SCENARIO A: Fetching the Top-Level Groups (A1, B2, C3, D4)
+    if (groupKeys.length === 0 && rowGroupCols.length > 0) {
+      const groupField = rowGroupCols[0].field; // usually "warehouseLocation"
+
+      const rows = await Inventory.aggregate([
+        { $match: filterQuery }, // Apply active filters first
+        {
+          $group: {
+            _id: `$${groupField}`, // Group by warehouseLocation
+            [groupField]: { $first: `$${groupField}` },
+            quantityInStock: { $sum: "$quantityInStock" }, // Enterprise Aggregation
+            sellingPrice: { $avg: "$sellingPrice" },
+            childCount: { $sum: 1 }, // Tells AG Grid how many items are inside
+          },
+        },
+        { $sort: { [groupField]: 1 } }, // Default alpha sort
+        { $skip: skip },
+        { $limit: limit },
+      ]);
+
+      // For groups, the total count is the number of unique groups
+      const totalCountResults = await Inventory.distinct(
+        groupField,
+        filterQuery
+      );
+
+      return res.json({
+        rows,
+        total: totalCountResults.length,
+      });
+    }
+
+    // SCENARIO B: Fetching items INSIDE a group (e.g., inside "A1")
+    if (groupKeys.length > 0) {
+      const groupField = rowGroupCols[0].field;
+      const groupValue = groupKeys[0];
+
+      // Add the group selection to the query
+      const groupFilter = { ...filterQuery, [groupField]: groupValue };
+
+      const [rows, total] = await Promise.all([
+        Inventory.find(groupFilter).skip(skip).limit(limit).lean(),
+        Inventory.countDocuments(groupFilter),
+      ]);
+
+      return res.json({ rows, total });
+    }
+
+    // SCENARIO C: Fallback (Flat list - no grouping active)
+    const sortQuery = {};
+    if (sortModel.length) {
+      sortQuery[sortModel[0].colId] = sortModel[0].sort === "asc" ? 1 : -1;
+    }
 
     const [rows, total] = await Promise.all([
       Inventory.find(filterQuery)
@@ -238,11 +275,10 @@ app.post("/data", async (req, res) => {
         .lean(),
       Inventory.countDocuments(filterQuery),
     ]);
-    // console.log(rows)
 
     res.json({ rows, total });
   } catch (err) {
-    console.error(" API ERROR:", err);
+    console.error("API ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });

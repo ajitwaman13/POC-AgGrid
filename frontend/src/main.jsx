@@ -17,6 +17,7 @@ import {
   SideBarModule,
   StatusBarModule,
   RowGroupingModule,
+  ExcelExportModule,
 } from "ag-grid-enterprise";
 
 ModuleRegistry.registerModules([
@@ -29,6 +30,7 @@ ModuleRegistry.registerModules([
   SideBarModule,
   StatusBarModule,
   RowGroupingModule,
+  ExcelExportModule,
 ]);
 
 createRoot(document.getElementById("root")).render(<App />);

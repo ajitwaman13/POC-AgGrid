@@ -1,12 +1,11 @@
 import React, { useRef, useMemo, useCallback } from "react";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-enterprise";
+// Styles
 import "ag-grid-community/styles/ag-grid.css";
-
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 const PAGE_SIZE = 20;
-const paginationPageSizeSelector = [10, 20, 50, 100];
 
 const ExcelInventoryEnterpriseGrid = () => {
   const gridRef = useRef(null);
@@ -14,42 +13,90 @@ const ExcelInventoryEnterpriseGrid = () => {
   const columnDefs = useMemo(
     () => [
       {
-        field: "sku",
+        field: "warehouseLocation",
+        rowGroup: true,
+        enableRowGroup: true,
+        hide: true,
         filter: "agTextColumnFilter",
-        editable: false,
       },
       {
-        field: "name",
+        field: "sku",
         filter: "agTextColumnFilter",
-        editable: true,
+        cellRenderer: (params) => (
+          <span style={{ fontWeight: "bold" }}>{params.value}</span>
+        ),
       },
       {
         field: "category",
         filter: "agSetColumnFilter",
-        editable: true,
-        filterParams: {
-          values: ["Electronics", "Clothing", "Home", "Toys"],
-        },
+        filterParams: { values: ["Electronics", "Clothing", "Home", "Toys"] },
       },
+      // {
+      //   field: "quantityInStock",
+      //   filter: "agNumberColumnFilter",
+      //   aggFunc: "sum",
+      //   editable: true,
+      // },
       {
         field: "sellingPrice",
         filter: "agNumberColumnFilter",
+        aggFunc: "avg",
+        valueFormatter: (p) => (p.value ? `$${p.value.toFixed(2)}` : ""),
+      },
+      {
+        field: "discountPercent",
         editable: true,
-        valueParser: (p) => Number(p.newValue),
+        filter: "agNumberColumnFilter",
+        cellEditor: "agNumberCellEditor",
+        valueSetter: (params) => {
+          const value = Number(params.newValue);
+          if (isNaN(value) || value < 0 || value > 100) return false;
+          params.data.discountPercent = value;
+          params.api.refreshCells({
+            rowNodes: [params.node],
+            columns: ["taxPercent"],
+            force: true,
+          });
+          return true;
+        },
+      },
+
+      {
+        field: "taxPercent",
+        editable: true,
+        filter: "agNumberColumnFilter",
+        cellEditor: "agNumberCellEditor",
+        valueSetter: (params) => {
+          const tax = Number(params.newValue);
+          const discount = Number(params.data?.discountPercent);
+          if (isNaN(tax) || tax < 0 || tax > 100 || tax > discount)
+            return false;
+          params.data.taxPercent = tax;
+          return true;
+        },
+        cellClassRules: {
+          "tax-invalid": (params) =>
+            Number(params.data?.taxPercent) >
+            Number(params.data?.discountPercent),
+        },
       },
       {
         field: "quantityInStock",
-        filter: "agNumberColumnFilter",
         editable: true,
-        valueParser: (p) => Number(p.newValue),
+        cellClassRules: {
+          "low-stock-cell": (p) =>
+            p.data.quantityInStock < p.data.minimumStockLevel,
+        },
+        filter: "agNumberColumnFilter",
+      },
+      {
+        field: "minimumStockLevel",
+        editable: true,
+        filter: "agNumberColumnFilter",
       },
       {
         field: "isActive",
         filter: "agSetColumnFilter",
-        editable: true,
-        filterParams: {
-          values: [true, false],
-        },
         cellEditor: "agCheckboxCellEditor",
       },
     ],
@@ -59,25 +106,54 @@ const ExcelInventoryEnterpriseGrid = () => {
   const defaultColDef = useMemo(
     () => ({
       flex: 1,
-      minWidth: 140,
+      minWidth: 150,
       sortable: true,
       floatingFilter: true,
       resizable: true,
-      filter: true,
     }),
     []
   );
 
+  //
+  const autoGroupColumnDef = useMemo(
+    () => ({
+      headerName: "Warehouse Hierarchy",
+      minWidth: 250,
+      cellRendererParams: {
+        checkbox: true,
+      },
+    }),
+    []
+  );
+
+  const exportTOExcel = useCallback(() => {
+    gridRef.current.api.exportDataAsExcel();
+  }, []);
+
   const serverSideDatasource = useCallback(
     () => ({
       getRows: async (params) => {
-        console.log("Request", params.request);
-        const { startRow, sortModel, filterModel } = params.request;
+        console.log("SSRM Request:", params.request);
+        console.log("Group Keys:", params.request.groupKeys);
+        console.log("Row Group Cols:", params.request.rowGroupCols);
+        console.log("Sort Model:", params.request.sortModel);
+        console.log("Filter Model:", params.request.filterModel);
+        console.log("value col", params.request.valueCols);
 
-        // backend payload
+        const {
+          startRow,
+          endRow,
+          groupKeys,
+          rowGroupCols,
+          sortModel,
+          filterModel,
+        } = params.request;
+
         const payload = {
-          page: Math.floor(startRow / PAGE_SIZE) + 1,
+          start: startRow,
           limit: PAGE_SIZE,
+          groupKeys,
+          rowGroupCols,
           sortModel,
           filterModel,
         };
@@ -90,64 +166,62 @@ const ExcelInventoryEnterpriseGrid = () => {
           });
 
           const data = await res.json();
-
           params.success({
             rowData: data.rows,
             rowCount: data.total,
           });
         } catch (err) {
-          console.error("failed to the feteching data ", err);
+          console.error("Fetch failed", err);
           params.fail();
         }
       },
     }),
     []
   );
-  // thinking like this is useEffect call only once
+
   const onGridReady = useCallback(
     (params) => {
-      console.log("call on gridready or change ..", params);
       params.api.setGridOption("serverSideDatasource", serverSideDatasource());
     },
     [serverSideDatasource]
   );
 
-  const onCellValueChanged = async (params) => {
-    if (params.oldValue === params.newValue) return;
-    console.log("on cell change", params.data);
-    try {
-      await fetch("http://localhost:3000/data/bulk-sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: [params.data] }),
-      });
-    } catch (err) {
-      console.error("Save failed", err);
-    }
-  };
-
   return (
-    <div className="ag-theme-quartz-dark" style={{ height: 650 }}>
+    <div
+      className="ag-theme-quartz-dark"
+      style={{ height: 700, width: "100%" }}
+    >
+      <button
+        onClick={exportTOExcel}
+        style={{ marginBottom: "5px", fontWeight: "bold" }}
+      >
+        Export to Excel
+      </button>
       <AgGridReact
         ref={gridRef}
+        // Core Config
         columnDefs={columnDefs}
-        // def col
         defaultColDef={defaultColDef}
-        onFilterChanged={true}
-        // pagination
-        pagination={true}
-        paginationPageSize={PAGE_SIZE}
-        paginationPageSizeSelector={paginationPageSizeSelector}
-        cacheBlockSize={PAGE_SIZE}
-        //  server side
+        autoGroupColumnDef={autoGroupColumnDef}
+        // Server-Side Specifics
         rowModelType="serverSide"
-        // some animations
-        animateRows
         onGridReady={onGridReady}
-        // something change the inline editing ,
-        onCellValueChanged={onCellValueChanged}
+        cacheBlockSize={PAGE_SIZE}
+        // rowGroupPanelShow="always"
+        // groupDisplayType="groupRows"
+        // animateRows={true}
+        // rowSelection="multiple"
+        // Selection & Persistence
+        suppressAggFuncInHeader={true}
+        getServerSideGroupKey={(dataItem) => dataItem.warehouseLocation}
+        // Side Bar (Enterprise)
+        sideBar={{
+          toolPanels: ["columns", "filters"],
+          defaultToolPanel: "columns",
+        }}
         theme={"legacy"}
-        groupDisplayType="multipleColumns"
+        // editType="singleCell"
+        editType="fullRow"
       />
     </div>
   );
