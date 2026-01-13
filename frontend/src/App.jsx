@@ -17,8 +17,10 @@ const App = () => {
       {/* combobox */}
 
       {/* <ComboBox /> */}
-
+  {/* comm version */}
       {/* <DataManagerGrid /> */}
+
+      {/* enterprise version */}
       {/* <ExcelInventoryGrid /> */}
 
       <ExcelInventoryEnterpriseGrid />

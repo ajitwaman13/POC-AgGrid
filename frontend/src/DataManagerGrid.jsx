@@ -81,7 +81,7 @@ const DataManagerGrid = () => {
         filter: "agTextColumnFilter",
         editable: true,
       },
-      { field: "name", editable: true, filter: "agTextColumnFilter" },
+     
       { field: "category", editable: true, filter: "agTextColumnFilter" },
       { field: "sellingPrice", editable: true, filter: "agNumberColumnFilter" },
       {
@@ -98,7 +98,7 @@ const DataManagerGrid = () => {
             columns: ["taxPercent"],
             force: true,
           });
-          return true;
+          return true; 
         },
       },
       {

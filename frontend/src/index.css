@@ -18,3 +18,13 @@
     background-color: #bd19a7;
 
 }
+
+.pinned-saved-row {
+  background-color: #1f7a1f !important; /* dark green */
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.row-dirty {
+   background-color: yellow !important;
+}

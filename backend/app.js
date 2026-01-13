@@ -4,6 +4,7 @@ import Inventory from "./db.js";
 import multer from "multer";
 import xlsx from "xlsx";
 import cors from "cors";
+import { CLIENT_RENEG_LIMIT } from "node:tls";
 const app = express();
 
 async function connectDB() {
@@ -174,22 +175,135 @@ app.get("/test", (req, res) => {
 // });
 
 // cors setup
+// app.post("/data", async (req, res) => {
+//   try {
+//     const {
+//       page = 1,
+//       limit = 20,
+//       sortModel = [],
+//       filterModel = {},
+//       groupKeys = [], // Received from AG Grid
+//       rowGroupCols = [], // Received from AG Grid
+//     } = req.body;
+//    console.log("backend hit")
+//     // console.log("BACKEND REQUEST - groupKeys:", groupKeys);
+
+//     const skip = (page - 1) * limit;
+
+//     /* ===== 1. BUILD FILTERS (Your existing logic) ===== */
+//     const filterQuery = {};
+//     for (const field in filterModel) {
+//       const f = filterModel[field];
+//       if (field === "isActive" && f.filterType === "set") {
+//         const booleanValues = f.values.map(
+//           (val) => val === "true" || val === true
+//         );
+//         filterQuery[field] = { $in: booleanValues };
+//         continue;
+//       }
+//       if (f.filterType === "text") {
+//         filterQuery[field] = { $regex: f.filter, $options: "i" };
+//       }
+//       if (f.filterType === "number") {
+//         const value = Number(f.filter);
+//         if (f.type === "equals") filterQuery[field] = value;
+//         if (f.type === "greaterThan") filterQuery[field] = { $gt: value };
+//         if (f.type === "lessThan") filterQuery[field] = { $lt: value };
+//       }
+//     }
+
+//     /* ===== 2. HANDLE GROUPING LOGIC ===== */
+
+//     // SCENARIO A: Fetching the Top-Level Groups (A1, B2, C3, D4)
+//     if (groupKeys.length === 0 && rowGroupCols.length > 0) {
+//       const groupField = rowGroupCols[0].field; // usually "warehouseLocation"
+
+//       const rows = await Inventory.aggregate([
+//         { $match: filterQuery }, // Apply active filters first
+//         {
+//           $group: {
+//             _id: `$${groupField}`, // Group by warehouseLocation
+//             [groupField]: { $first: `$${groupField}` },
+//             quantityInStock: { $sum: "$quantityInStock" }, // Enterprise Aggregation
+//             sellingPrice: { $avg: "$sellingPrice" },
+//             childCount: { $sum: 1 }, // Tells AG Grid how many items are inside
+//           },
+//         },
+//         { $sort: { [groupField]: 1 } }, // Default alpha sort
+//         { $skip: skip },
+//         { $limit: limit },
+//       ]);
+
+//       // For groups, the total count is the number of unique groups
+//       const totalCountResults = await Inventory.distinct(
+//         groupField,
+//         filterQuery
+//       );
+
+//       return res.json({
+//         rows,
+//         total: totalCountResults.length,
+//       });
+//     }
+
+//     // SCENARIO B: Fetching items INSIDE a group (e.g., inside "A1")
+//     if (groupKeys.length > 0) {
+//       const groupField = rowGroupCols[0].field;
+//       const groupValue = groupKeys[0];
+
+//       // Add the group selection to the query
+//       const groupFilter = { ...filterQuery, [groupField]: groupValue };
+
+//       const [rows, total] = await Promise.all([
+//         Inventory.find(groupFilter).skip(skip).limit(limit).lean(),
+//         Inventory.countDocuments(groupFilter),
+//       ]);
+
+//       return res.json({ rows, total });
+//     }
+
+//     // SCENARIO C: Fallback (Flat list - no grouping active)
+//     const sortQuery = {};
+//     if (sortModel.length) {
+//       sortQuery[sortModel[0].colId] = sortModel[0].sort === "asc" ? 1 : -1;
+//     }
+
+//     const [rows, total] = await Promise.all([
+//       Inventory.find(filterQuery)
+//         .sort(sortQuery)
+//         .skip(skip)
+//         .limit(limit)
+//         .lean(),
+//       Inventory.countDocuments(filterQuery),
+//     ]);
+
+//     res.json({ rows, total });
+//   } catch (err) {
+//     console.error("API ERROR:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+
 app.post("/data", async (req, res) => {
   try {
     const {
-      page = 1,
+      start = 0,        // Changed from 'page' to 'start' to match AG Grid
       limit = 20,
       sortModel = [],
       filterModel = {},
-      groupKeys = [], // Received from AG Grid
-      rowGroupCols = [], // Received from AG Grid
+      groupKeys = [],
+      rowGroupCols = [],
     } = req.body;
+   console.log("group keys in backend",groupKeys);
+    console.log(`Backend hit: Fetching from index ${start} with limit ${limit}`);
 
-    console.log("BACKEND REQUEST - groupKeys:", groupKeys);
+    // ✅ FIXED: AG Grid sends the exact index to skip as 'startRow' 
+    // We mapped 'startRow' to 'start' in the frontend. 
+    // So we use 'start' directly.
+    const skip = parseInt(start); 
 
-    const skip = (page - 1) * limit;
-
-    /* ===== 1. BUILD FILTERS (Your existing logic) ===== */
+    /* ===== 1. BUILD FILTERS (Kept exactly as yours) ===== */
     const filterQuery = {};
     for (const field in filterModel) {
       const f = filterModel[field];
@@ -213,31 +327,26 @@ app.post("/data", async (req, res) => {
 
     /* ===== 2. HANDLE GROUPING LOGIC ===== */
 
-    // SCENARIO A: Fetching the Top-Level Groups (A1, B2, C3, D4)
     if (groupKeys.length === 0 && rowGroupCols.length > 0) {
-      const groupField = rowGroupCols[0].field; // usually "warehouseLocation"
+      const groupField = rowGroupCols[0].field;
 
       const rows = await Inventory.aggregate([
-        { $match: filterQuery }, // Apply active filters first
+        { $match: filterQuery },
         {
           $group: {
-            _id: `$${groupField}`, // Group by warehouseLocation
+            _id: `$${groupField}`,
             [groupField]: { $first: `$${groupField}` },
-            quantityInStock: { $sum: "$quantityInStock" }, // Enterprise Aggregation
+            quantityInStock: { $sum: "$quantityInStock" },
             sellingPrice: { $avg: "$sellingPrice" },
-            childCount: { $sum: 1 }, // Tells AG Grid how many items are inside
+            childCount: { $sum: 1 },
           },
         },
-        { $sort: { [groupField]: 1 } }, // Default alpha sort
-        { $skip: skip },
+        { $sort: { [groupField]: 1 } },
+        { $skip: skip }, 
         { $limit: limit },
       ]);
 
-      // For groups, the total count is the number of unique groups
-      const totalCountResults = await Inventory.distinct(
-        groupField,
-        filterQuery
-      );
+      const totalCountResults = await Inventory.distinct(groupField, filterQuery);
 
       return res.json({
         rows,
@@ -245,32 +354,31 @@ app.post("/data", async (req, res) => {
       });
     }
 
-    // SCENARIO B: Fetching items INSIDE a group (e.g., inside "A1")
     if (groupKeys.length > 0) {
       const groupField = rowGroupCols[0].field;
       const groupValue = groupKeys[0];
-
-      // Add the group selection to the query
       const groupFilter = { ...filterQuery, [groupField]: groupValue };
 
       const [rows, total] = await Promise.all([
-        Inventory.find(groupFilter).skip(skip).limit(limit).lean(),
+        Inventory.find(groupFilter).skip(skip).limit(limit).lean(), // ✅ Fixed
         Inventory.countDocuments(groupFilter),
       ]);
 
       return res.json({ rows, total });
     }
 
-    // SCENARIO C: Fallback (Flat list - no grouping active)
+    /* ===== SCENARIO C: Flat list ===== */
     const sortQuery = {};
     if (sortModel.length) {
       sortQuery[sortModel[0].colId] = sortModel[0].sort === "asc" ? 1 : -1;
+    } else {
+      sortQuery["createdAt"] = -1; // Default sort
     }
 
     const [rows, total] = await Promise.all([
       Inventory.find(filterQuery)
         .sort(sortQuery)
-        .skip(skip)
+        .skip(skip) 
         .limit(limit)
         .lean(),
       Inventory.countDocuments(filterQuery),
@@ -283,125 +391,7 @@ app.post("/data", async (req, res) => {
   }
 });
 
-// app.get("/data", async (req, res) => {
-//   try {
-//     console.log("➡️ BACKEND QUERY PARAMS:", req.query);
 
-//     /* ===================== BASIC PARAMS ===================== */
-//     const limit = parseInt(req.query.limit, 10) || 20;
-//     const sortField = req.query.sortField || "_id";
-//     const sortOrder = req.query.sortOrder === "desc" ? -1 : 1;
-
-//     const sort = { [sortField]: sortOrder };
-//     let filterQuery = {};
-
-//     /* ===================== FILTERING ===================== */
-//     if (req.query.filters) {
-//       const filters = JSON.parse(req.query.filters);
-//       console.log("🔍 PARSED FILTER MODEL:", filters);
-
-//       Object.keys(filters).forEach((field) => {
-//         const f = filters[field];
-
-//         /* ---------- TEXT FILTER ---------- */
-//         if (f.filterType === "text") {
-//           filterQuery[field] = {
-//             $regex: f.filter,
-//             $options: "i",
-//           };
-//         }
-
-//         /* ---------- NUMBER FILTER ---------- */
-//         if (f.filterType === "number") {
-//           const value = Number(f.filter);
-
-//           if (f.type === "equals") {
-//             filterQuery[field] = value; // ✅ exact match
-//           }
-
-//           if (f.type === "greaterThan") {
-//             filterQuery[field] = { $gt: value };
-//           }
-
-//           if (f.type === "lessThan") {
-//             filterQuery[field] = { $lt: value };
-//           }
-
-//           if (f.type === "greaterThanOrEqual") {
-//             filterQuery[field] = { $gte: value };
-//           }
-
-//           if (f.type === "lessThanOrEqual") {
-//             filterQuery[field] = { $lte: value };
-//           }
-
-//           if (f.type === "inRange") {
-//             filterQuery[field] = {
-//               $gte: Number(f.filter),
-//               $lte: Number(f.filterTo),
-//             };
-//           }
-//         }
-
-//         /* ---------- SET FILTER (boolean / enum) ---------- */
-//         if (f.filterType === "set") {
-//           filterQuery[field] = { $in: f.values };
-//         }
-//       });
-//     }
-
-//     console.log("📦 FINAL MONGO QUERY:", filterQuery);
-//     console.log("↕️ SORT:", sort);
-//     console.log("📏 LIMIT:", limit);
-
-//     /* ===================== QUERY ===================== */
-//     const rows = await Inventory.find(filterQuery)
-//       .sort(sort)
-//       .limit(limit)
-//       .lean();
-
-//     res.json({ rows });
-//   } catch (err) {
-//     console.error("❌ API ERROR:", err);
-//     res.status(500).json({ error: err.message });
-//   }
-// });
-
-// update the table or data
-// app.put("/:id", async (req, res) => {
-//   try {
-//     console.log("Api hit editing ...");
-
-//     const id = req.params.id;
-//     const updateData = req.body;
-//     console.log("id ", id);
-//     //  console.log(id ,updateData)
-//     //   console.log("UPDATE ID:", id);
-//     //   console.log("UPDATE DATA:", updateData);
-
-//     const updatedRow = await Inventory.findByIdAndUpdate(id, updateData, {
-//       new: true,
-//     });
-//     // console.log(updatedRow)
-
-//     if (!updatedRow) {
-//       return res.status(404).json({
-//         message: "Record not found",
-//       });
-//     }
-
-//     res.status(200).json({
-//       message: "Data updated successfully",
-//       data: updatedRow,
-//     });
-//   } catch (error) {
-//     console.error("UPDATE ERROR:", error);
-//     res.status(500).json({
-//       message: "Failed to update data",
-//       error: error.message,
-//     });
-//   }
-// });
 app.put("/bulk/update", async (req, res) => {
   try {
     console.log("Bulk update API hit");
@@ -447,10 +437,14 @@ app.put("/bulk/update", async (req, res) => {
 
 // new data
 app.post("/data/bulk-create", async (req, res) => {
-  console.log(req.body);
-  const newdata = await Inventory.insertMany(req.body.rows);
-  console.log(newdata);
-  res.status(200).json({ newdata });
+  try {
+    console.log(req.body);
+    const newdata = await Inventory.insertMany(req.body.rows);
+    console.log(newdata);
+    res.status(200).json({ newdata });
+  } catch (error) {
+    res.status(400).json({error:"bulk create failed"})
+  }
 });
 
 const upload = multer({ storage: multer.memoryStorage() });

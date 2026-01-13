@@ -24,6 +24,7 @@ import {
   ColumnsToolPanelModule,
   CellSelectionModule,
   ClipboardModule,
+  ServerSideRowModelApiModule
 } from "ag-grid-enterprise";
 
 ModuleRegistry.registerModules([
@@ -43,6 +44,7 @@ ModuleRegistry.registerModules([
   ColumnsToolPanelModule,
   CellSelectionModule,
   ClipboardModule,
+  ServerSideRowModelApiModule
 ]);
 
 createRoot(document.getElementById("root")).render(<App />);
