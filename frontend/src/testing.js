@@ -1,3 +1,26 @@
+
+let userPerson ={
+    frst_Name:"Ajit",
+    last_Name:"waman",
+    age:21,
+    addrres:{
+        locations:"pune",
+        Zipcode:1234
+    }
+}
+
+// let UserUpdated=userPerson{}?
+// userPerson[firs_name,]
+
+let UserUpdated={...userPerson,age:22,gen:"m"};
+UserUpdated.addrres.Zipcode=12234456;
+UserUpdated.last_Name="xyuz";
+console.log(UserUpdated)
+console.log(userPerson)
+//  [1,2,3,{234},dasa]
+
+
+
 import React, { useRef, useMemo, useCallback } from "react";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-enterprise";
@@ -284,10 +307,11 @@ const ExcelInventoryEnterpriseGrid = () => {
             console.log("Save all changes button click and get the data  ");
             //  gettign dirty rows from the grid
             gridRef.current.api.forEachNode((node) => {
-             
+              // console.log("node data",node);
+              // console.log("node is pinned", node.rowPinned);
               // console.log("node data is dirty", node.data?._isDirty);
               if (!node.rowPinned && node.data?._isDirty) {
-                console.log("pushing dirty row", node.data);
+                // console.log("pushing dirty row", node.data);
                 dirtyRows.push(node.data);
               }
             });
@@ -302,7 +326,7 @@ const ExcelInventoryEnterpriseGrid = () => {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ rows: dirtyRows }),
             });
-            //  server refresh without full reload
+            //  server refresh wuthout full reload
             gridRef.current.api.refreshServerSide({ purge: false });
             alert("Saved successfully");
           }}
@@ -313,7 +337,6 @@ const ExcelInventoryEnterpriseGrid = () => {
       {/* {console.log("the gridref grid",gridRef)} */}
       <AgGridReact
         ref={gridRef}
-     
 
         rowModelType="serverSide"
 
@@ -333,26 +356,28 @@ const ExcelInventoryEnterpriseGrid = () => {
         // Editing
 
         stopEditingWhenCellsLoseFocus={true}
-
+          
         onCellValueChanged={(value) => {
+       
           if (!value.node.rowPinned && value.oldValue !== value.newValue) {
-            console.log(" value data")
-            // value.node.setData({ ...value.data, _isDirty: true });  //shllo
-            value.data._isDirty=true;
-            value.node.setData(value.data ); 
+            // console.log("val data", value.data)
+          value.node.setData({...value.data, _isDirty: true });  //shllo
+            
+            // console.log(" value data is dirty", value.data._isDirty);
+            // value.data._isDirty=true;
+            // // console.log(" value data after setting dirty", value.data._isDirty);
+            // value.node.setData(value.data ); 
 
           }
-        }}  
+        }}
 
 
         // refresh cell to show updated value after editing
         onCellEditingStopped={(params) => {
-          console.log("on cell editing stopeed ..",params.node)
           if (!params.node.rowPinned) {
             params.api.refreshCells({
               rowNodes: [params.node],
               force: true,
-      
             });
           }
         }}
@@ -391,7 +416,6 @@ const ExcelInventoryEnterpriseGrid = () => {
           toolPanels: ["columns", "filters"],
           defaultToolPanel: "columns",
         }}
-        onBatchEditingStarted={true}
       />
     </div>
   );
