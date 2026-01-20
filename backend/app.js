@@ -24,36 +24,35 @@ app.use(
   cors({
     origin: "http://localhost:5173",
     credentials: true,
-  })
+  }),
 );
 
 app.get("/test", (req, res) => {
   res.status(200).json({ message: "okay it is running.." });
 });
 
-
 app.post("/data", async (req, res) => {
   try {
     const {
-      start = 0,        // Changed from 'page' to 'start' to match AG Grid
+      start = 0, // Changed from 'page' to 'start' to match AG Grid
       limit = 20,
       sortModel = [],
       filterModel = {},
       groupKeys = [],
       rowGroupCols = [],
     } = req.body;
-   console.log("data fetching api hiting ..")
+    console.log("data fetching api hiting ..");
     // console.log(`Backend hit: Fetching from index ${start} with limit ${limit}`);
 
-    const skip = parseInt(start); 
+    const skip = parseInt(start);
 
-//  filter logic
+    //  filter logic
     const filterQuery = {};
     for (const field in filterModel) {
       const f = filterModel[field];
       if (field === "isActive" && f.filterType === "set") {
         const booleanValues = f.values.map(
-          (val) => val === "true" || val === true
+          (val) => val === "true" || val === true,
         );
         filterQuery[field] = { $in: booleanValues };
         continue;
@@ -69,7 +68,7 @@ app.post("/data", async (req, res) => {
       }
     }
 
-// grouping 
+    // grouping the
     if (groupKeys.length === 0 && rowGroupCols.length > 0) {
       const groupField = rowGroupCols[0].field;
 
@@ -85,18 +84,21 @@ app.post("/data", async (req, res) => {
           },
         },
         { $sort: { [groupField]: 1 } },
-        { $skip: skip }, 
+        { $skip: skip },
         { $limit: limit },
       ]);
-// total count row
-      const totalCountResults = await Inventory.distinct(groupField, filterQuery);
-
+      // total count row
+      const totalCountResults = await Inventory.distinct(
+        groupField,
+        filterQuery,
+      );
+      console.log("backend grouping response ");
       return res.json({
         rows,
         total: totalCountResults.length,
       });
     }
-
+    //  the group key is > thenwe send
     if (groupKeys.length > 0) {
       const groupField = rowGroupCols[0].field;
       const groupValue = groupKeys[0];
@@ -106,11 +108,11 @@ app.post("/data", async (req, res) => {
         Inventory.find(groupFilter).skip(skip).limit(limit).lean(), // ✅ Fixed
         Inventory.countDocuments(groupFilter),
       ]);
-
+      console.log("the come form the Group key doing the ");
       return res.json({ rows, total });
     }
 
-//  sorting logic
+    //  sorting logic
     const sortQuery = {};
     if (sortModel.length) {
       sortQuery[sortModel[0].colId] = sortModel[0].sort === "asc" ? 1 : -1;
@@ -118,10 +120,11 @@ app.post("/data", async (req, res) => {
       sortQuery["createdAt"] = -1; // Default sort
     }
 
+    // final response
     const [rows, total] = await Promise.all([
       Inventory.find(filterQuery)
         .sort(sortQuery)
-        .skip(skip) 
+        .skip(skip)
         .limit(limit)
         .lean(),
       Inventory.countDocuments(filterQuery),
@@ -133,7 +136,6 @@ app.post("/data", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 app.put("/bulk/update", async (req, res) => {
   try {
@@ -186,7 +188,7 @@ app.post("/data/bulk-create", async (req, res) => {
     console.log(newdata);
     res.status(200).json({ newdata });
   } catch (error) {
-    res.status(400).json({error:"bulk create failed"})
+    res.status(400).json({ error: "bulk create failed" });
   }
 });
 
@@ -196,7 +198,7 @@ app.post("/upload-excel", upload.single("file"), (req, res) => {
     console.log("file recived", req.file);
     const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
     const jsonData = xlsx.utils.sheet_to_json(
-      workbook.Sheets[workbook.SheetNames[0]]
+      workbook.Sheets[workbook.SheetNames[0]],
     );
     console.log(jsonData);
     res.status(200).json(jsonData);
@@ -209,13 +211,15 @@ app.post("/upload-excel", upload.single("file"), (req, res) => {
 app.post("/data/bulk-sync", async (req, res) => {
   try {
     const { rows } = req.body;
-    console.log("backend getting the Rows",rows)
+    console.log("backend getting the Rows", rows);
+    let count = 0;
     const bulkOps = rows.map((row) => {
+      console.log("the count will be ", count++);
       const { _id, _isDirty, _isNew, ...cleanData } = row;
-      console.log("_id is the ",_id)
+      console.log("_id is the ", _id);
       return {
         updateOne: {
-          filter: { sku: cleanData.sku }, // Unique Identifier
+          filter: { sku: cleanData.sku }, // Unique Identifier is sku
           update: { $set: cleanData },
           upsert: true, // Create if not found
         },

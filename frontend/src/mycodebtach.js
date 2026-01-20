@@ -1,4 +1,3 @@
-// myc code today
 import React, { useRef, useMemo, useCallback } from "react";
 import { AgGridReact } from "ag-grid-react";
 import "ag-grid-enterprise";
@@ -9,21 +8,11 @@ import "ag-grid-community/styles/ag-theme-quartz.css";
 
 const PAGE_SIZE = 20;
 
-const CATEGORY_VALUES = [
-  "Electronics",
-  "Furniture",
-  "Office",
-  "Accessories",
-  "Home",
-];
-
-const WAREHOUSE_VALUES = ["A", "B", "C", "D", "E"];
-
 const ExcelInventoryEnterpriseGrid = () => {
   // Grid ref
   const gridRef = useRef(null);
-
   const editedRowIdsRef = useRef(new Set());
+
   // Empty row template
   const EMPTY_ROW = {
     sku: "",
@@ -49,68 +38,18 @@ const ExcelInventoryEnterpriseGrid = () => {
     () => [
       {
         field: "warehouseLocation",
-        enableRowGroup: true,
+        enableRowGroup: true, // grouping allowed
         filter: "agTextColumnFilter",
         editable: true,
-        cellEditor: "agRichSelectCellEditor",
-        cellEditorPopup: true,
-        cellEditorPopupPosition: "under",
-        cellEditorParams: {
-          values: WAREHOUSE_VALUES,
-        },
-        // valueSetter: (params) => {
-        //   const NewWarehouseLocation = params.newValue;
-        //   console.log("new wareHouse locations", NewWarehouseLocation);
-        //   if (NewWarehouseLocation === params.data.warehouseLocation) {
-        //     return false;
-        //   }
-        //   params.data.warehouseLocation = NewWarehouseLocation;
-        //   const index = WAREHOUSE_VALUES.indexOf(NewWarehouseLocation);
-        //   if (index >= 0) {
-        //     params.data.category = CATEGORY_VALUES[index];
-        //   }
-
-        //   return true;
-        // },
       },
       {
         field: "category",
         enableRowGroup: true,
         filter: "agSetColumnFilter", /// Dropdown filter with checkboxes
         filterParams: {
-          values: ["Electronics", "Furniture", "Office", "Accessories", "Home"],
+          values: ["Electronics", "Furniture", "Office", "Accessories"],
         },
         editable: true,
-        cellEditorPopup: true,
-        cellEditor: "agRichSelectCellEditor",
-        cellEditorPopupPosition: "under",
-        cellEditorParams: {
-          values: CATEGORY_VALUES,
-        },
-        valueSetter: (params) => {
-          const newcategory = params.newValue;
-          console.log("the value is the new category", newcategory);
-          // nothing to changes
-          if (newcategory === params.data.category) {
-            return false;
-          }
-          //
-          console.log("params.data.category", params.data.category);
-          params.data.category = newcategory;
-
-          const index = CATEGORY_VALUES.indexOf(newcategory);
-          console.log("index of the ", index);
-          if (index >= 0) {
-            params.data.warehouseLocation = WAREHOUSE_VALUES[index];
-            // params.data.sellingPrice = 10;
-            // params.data.discountPercent = 50;
-            // params.data.taxPercent = 18;
-            // params.data.quantityInStock = 100;
-            // params.data.isActive = false;
-            // params.data.minimumStockLevel = 0;
-          }
-          return true;
-        },
       },
       {
         field: "sku",
@@ -118,13 +57,11 @@ const ExcelInventoryEnterpriseGrid = () => {
       },
       {
         field: "sellingPrice",
-        headerName: "Selling Price ($)",
         filter: "agNumberColumnFilter",
         editable: true,
-        // aggFunc: "sum",
         cellEditor: "agNumberCellEditor",
-
-        valueFormatter: (price) => (price.value ? `$${price.value}` : " "),
+        // valueFormatter: (price) =>
+        //   price.value ? `$${price.value.toFixed(2)}` : "",
       },
       {
         field: "discountPercent",
@@ -204,7 +141,7 @@ const ExcelInventoryEnterpriseGrid = () => {
           p.value ? new Date(p.value).toLocaleString() : "",
       },
     ],
-    [],
+    []
   );
 
   // Default column common setting
@@ -215,9 +152,9 @@ const ExcelInventoryEnterpriseGrid = () => {
       sortable: true,
       floatingFilter: true,
       resizable: true,
-      editable: () => true,
+      editable: true,
     }),
-    [],
+    []
   );
 
   // Export  to excel
@@ -276,7 +213,7 @@ const ExcelInventoryEnterpriseGrid = () => {
         }
       },
     }),
-    [],
+    []
   );
 
   // Grid ready
@@ -285,8 +222,42 @@ const ExcelInventoryEnterpriseGrid = () => {
       console.log("onGridReady params called register");
       params.api.setGridOption("serverSideDatasource", fetchbackendData());
     },
-    [fetchbackendData],
+    [fetchbackendData]
   );
+
+  // batch save
+  const saveBatchChanges = async () => {
+    const newchanges = [];
+    editedRowIdsRef.current.forEach((id) => {
+      console.log("save batch changes working ...");
+      const node = gridRef.current.api.getRowNode(id); //getting the row id
+      if (!node.rowPinned && node?.data) {
+        newchanges.push(node.data);
+      }
+    });
+
+    if (!newchanges.length) {
+      alert("No changes");
+      return;
+    }
+    await fetch("http://localhost:3000/data/bulk-sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: newchanges }),
+    });
+
+    editedRowIdsRef.current.clear(); /// clear the set
+
+    gridRef.current.api.refreshServerSide({ purge: false });
+
+    gridRef.current.api.undoRedoService.clearUndoRedoStack();
+  };
+
+  const cancelBatch = () => {
+    gridRef.current.api.undoRedoService.clearUndoRedoStack();
+    editedRowIdsRef.current.clear(); // same clear the set
+    gridRef.current.api.refreshServerSide({ purge: false });
+  };
 
   return (
     <div className="ag-theme-quartz-dark" style={{ height: 700 }}>
@@ -331,7 +302,7 @@ const ExcelInventoryEnterpriseGrid = () => {
           Add Data
         </button>
         {/* inline editing and update the data */}
-        <button
+        {/* <button
           style={{
             backgroundColor: "red",
             color: "white",
@@ -341,33 +312,15 @@ const ExcelInventoryEnterpriseGrid = () => {
             // hold the dirty rows
             const dirtyRows = [];
             console.log("Save all changes button click and get the data  ");
-            console.time("funtion started...");
             //  gettign dirty rows from the grid
-            let count = 1;
             gridRef.current.api.forEachNode((node) => {
-              count++;
-              // console.log("count of the forEachNode is the ", count);
-              // console.log("node is pinned", node.rowPinned);
+             
               // console.log("node data is dirty", node.data?._isDirty);
               if (!node.rowPinned && node.data?._isDirty) {
                 console.log("pushing dirty row", node.data);
                 dirtyRows.push(node.data);
               }
             });
-
-            // using the use ref
-            // let count = 1;
-            // console.log("editedRowIdsRef", editedRowIdsRef);
-            // editedRowIdsRef.current.forEach((id) => {
-            //   console.log("editedRowIdsRef", editedRowIdsRef);
-            //   count++;
-            //   console.log("count is ", count);
-            //   const node = gridRef.current.api.getRowNode(id);
-            //   console.log("node data in ", node);
-            //   if (node?.data) {
-            //     dirtyRows.push(node.data);
-            //   }
-            // });
 
             if (dirtyRows.length === 0) {
               return alert("No changes");
@@ -379,24 +332,37 @@ const ExcelInventoryEnterpriseGrid = () => {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ rows: dirtyRows }),
             });
-
-            // remove the
-            // editedRowIdsRef.current.clear();
-            //  server refresh wuthout full reload
+            //  server refresh without full reload
             gridRef.current.api.refreshServerSide({ purge: false });
-            console.timeEnd("funtion started...");
             alert("Saved successfully");
           }}
         >
           Save All Changes
-        </button>
+        </button> */}
       </div>
-      {/* {console.log("the gridref grid",gridRef)} */}
+
+      {/* batch editing  */}
+
+      <button onClick={() => gridRef.current.api.undoRedoService.undo()}>
+        Undo
+      </button>
+
+      <button onClick={() => gridRef.current.api.undoRedoService.redo()}>
+        Redo
+      </button>
+
+      <button onClick={saveBatchChanges}>Save All Changes</button>
+
+      <button onClick={cancelBatch}>Cancel</button>
+
       <AgGridReact
         ref={gridRef}
-        enableCharts={true}
-        // getRowId={(params) => params.data.rowId}
-        getRowId={(params) => params.data._id}
+        // editing the batch
+        editType="singleCell"
+        enableCellChangeFlash={true}
+        undoRedoCellEditing={true}
+        undoRedoCellEditingLimit={100}
+        suppressValidation={true}
         rowModelType="serverSide"
         columnDefs={columnDefs}
         defaultColDef={defaultColDef}
@@ -405,22 +371,25 @@ const ExcelInventoryEnterpriseGrid = () => {
 
         pagination={true}
         paginationPageSize={PAGE_SIZE}
-        cacheBlockSize={PAGE_SIZE} //20
-        // maxBlocksInCache={1}
+        cacheBlockSize={PAGE_SIZE}
         // Lifecycle
         onGridReady={onGridReady}
         // Editing
 
         stopEditingWhenCellsLoseFocus={true}
-        onCellValueChanged={(value) => {
-          if (!value.node.rowPinned && value.oldValue !== value.newValue) {
-            console.log(" value data", value.oldValue, value.newValue);
+        // onCellValueChanged={(value) => {
+        //   if (!value.node.rowPinned && value.oldValue !== value.newValue) {
+        //     console.log(" value data")
+        //     // value.node.setData({ ...value.data, _isDirty: true });  //shllo
+        //     value.data._isDirty=true;
+        //     value.node.setData(value.data );
 
-            // value.node.setData({ ...value.data, _isDirty: true });  //shllo
-            value.data._isDirty = true;
-            value.node.setData(value.data);
-            console.log("the value data isdirty", value.data._isDirty);
-            // editedRowIdsRef.current.add(value.node.id);
+        //   }
+        // }}
+
+        onCellValueChanged={(params) => {
+          if (!params.node.rowPinned) {
+            editedRowIdsRef.current.add(params.node.id);
           }
         }}
         // refresh cell to show updated value after editing
@@ -433,12 +402,13 @@ const ExcelInventoryEnterpriseGrid = () => {
             });
           }
         }}
-        // // Row styling
-        rowClassRules={{
-          // row dirty highlight
-          "row-dirty": (parameter) =>
-            !parameter.node.rowPinned && parameter.data?._isDirty,
-        }}
+        // Row styling
+        // rowClassRules={{
+        //   // row dirty highlight
+        //   "row-dirty": (parameter) =>
+        //     !parameter.node.rowPinned && parameter.data?._isDirty,
+        // }}
+
         // showing the pinned row in the green color  (Apply the condtional css)
         getRowClass={(params) => {
           if (
@@ -454,18 +424,17 @@ const ExcelInventoryEnterpriseGrid = () => {
         cellSelection={true}
         suppressClipboardPaste={false}
         suppressLastEmptyLineOnPaste={true}
-        rowSelection={{
-          mode: "multiRow",
-        }}
+        rowSelection="multiple"
         // Grouping
         rowGroupPanelShow="always"
         groupDisplayType="groupRows"
         animateRows={true}
         // Side Bar Enterprise
-        // sideBar={{
-        //   toolPanels: ["columns", "filters"],
-        //   defaultToolPanel: "columns",
-        // }}
+        sideBar={{
+          toolPanels: ["columns", "filters"],
+          defaultToolPanel: "columns",
+        }}
+        onBatchEditingStarted={true}
       />
     </div>
   );

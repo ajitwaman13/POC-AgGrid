@@ -8,8 +8,9 @@ import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 
 // ✅ Community
-import { AllCommunityModule } from "ag-grid-community";
+import { AllCommunityModule, ValidationModule } from "ag-grid-community";
 
+import { AgChartsEnterpriseModule } from "ag-charts-enterprise";
 import {
   ServerSideRowModelModule,
   SetFilterModule,
@@ -25,7 +26,7 @@ import {
   CellSelectionModule,
   ClipboardModule,
   ServerSideRowModelApiModule,
-  enableCellChangeFlash
+  RichSelectModule,
 } from "ag-grid-enterprise";
 
 ModuleRegistry.registerModules([
@@ -46,7 +47,7 @@ ModuleRegistry.registerModules([
   CellSelectionModule,
   ClipboardModule,
   ServerSideRowModelApiModule,
-  enableCellChangeFlash
+  RichSelectModule,
 ]);
 
 createRoot(document.getElementById("root")).render(<App />);
